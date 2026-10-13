@@ -16,13 +16,14 @@ export function Prezentare() {
 
   async function incarca() {
     try {
-      const [luni, intrebari, generale, probleme] = await Promise.all([
+      const [luni, intrebari, generale, probleme, proiecte] = await Promise.all([
         q(sb.from('v_rezumat_luna').select('*').order('luna')),
         q(sb.from('intrebari').select('id', { count: 'exact', head: true }).neq('stare', 'rezolvata')),
         q(sb.from('intrebari').select('id', { count: 'exact', head: true }).neq('stare', 'rezolvata').is('tranzactie_id', null).is('element_id', null)),
         q(sb.from('v_verificari').select('verificare,luna').in('verificare', VERIFICARI_BANI)),
+        q(sb.from('v_proiecte').select('id', { count: 'exact', head: true }).gt('incasari', 0).is('procent_matei', null)),
       ]);
-      setD({ luni, intrebari: intrebari.count, generale: generale.count, probleme });
+      setD({ luni, intrebari: intrebari.count, generale: generale.count, probleme, proiecteFara: proiecte.count });
     } catch (e) { setEroare(e.message); }
   }
   useEffect(() => { incarca(); }, []);
@@ -62,6 +63,7 @@ export function Prezentare() {
     [propuse, 'propuneri de confirmat', () => mergi('tranzactii', { stare: 'propus' })],
     [d.intrebari, d.generale ? `întrebări deschise (${d.generale} generale)` : 'întrebări deschise', () => mergi('intrebari')],
     [d.probleme.length, 'probleme care schimbă suma', () => mergi('verificari')],
+    [d.proiecteFara, 'proiecte fără partea lui Matei', () => mergi('nomenclatoare')],
   ];
 
   return (

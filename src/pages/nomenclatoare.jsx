@@ -1,7 +1,7 @@
 import { useContext, useEffect, useState } from 'preact/hooks';
 import { sb, q } from '../supabase.js';
-import { Ctx } from '../app.jsx';
-import { bani, luna, LUNI, IMPARTIRI, citesteSuma, citesteProcent } from '../format.js';
+import { Ctx, mergi } from '../app.jsx';
+import { bani, luna, suma, LUNI, IMPARTIRI, citesteSuma, citesteProcent } from '../format.js';
 
 // Valori din tabel: sume și procente citite strict; ce nu e număr rămâne neschimbat.
 const num = (x) => { const v = citesteSuma(x); return v === undefined ? NaN : v; };
@@ -11,15 +11,74 @@ export function Nomenclatoare() {
   return (
     <div>
       <h1 class="titlu">Proiecte și costuri</h1>
-      <p class="intro">Clienții și procentul lui Matei pe fiecare proiect, costurile recurente, colaboratorii și categoriile.</p>
-      <Simplu tabel="clienti" titlu="Clienți și proiecte" campuri={[['nume', 'Nume'], ['procent_matei', '% Matei', null, procent], ['cui', 'CUI'], ['tip', 'Tip', ['necunoscut', 'retainer', 'one_time', 'mixt']],
-        ['activitate', 'Al cui', ['necunoscut', 'alex', 'matei', 'comun']], ['nota', 'Notă']]}
-        nota="„% Matei” e partea lui Matei din profitul proiectului. Se propune pe liniile legate de client, dar fiecare linie se confirmă separat. Gol = încă nestabilit." />
+      <p class="intro">Proiectele și partea lui Matei din fiecare, costurile recurente, colaboratorii și categoriile.</p>
+      <Proiecte />
       <Costuri />
       <Alocari />
       <Simplu tabel="colaboratori" titlu="Colaboratori" campuri={[['nume', 'Nume'], ['nota', 'Notă']]} />
       <Simplu tabel="categorii" titlu="Categorii" cheie="cod" campuri={[['cod', 'Cod'], ['eticheta', 'Etichetă'], ['ordine', 'Ordine']]} />
     </div>
+  );
+}
+
+// Proiectele (clienții) cu încasările din extrase, ca Alex să scrie partea lui Matei pe fiecare.
+function Proiecte() {
+  const { reincarcaNom } = useContext(Ctx);
+  const [lista, setLista] = useState(null);
+  const [mesaj, setMesaj] = useState('');
+  const [nou, setNou] = useState('');
+  const incarca = async () => setLista(await q(sb.from('v_proiecte').select('*').order('total_ron', { ascending: false }).order('nume')));
+  useEffect(() => { incarca().catch((e) => setMesaj(e.message)); }, []);
+
+  async function upd(id, x) {
+    if (Object.values(x).some((v) => Number.isNaN(v))) { setMesaj('Procentul trebuie să fie între 0 și 100 (de exemplu 50 sau 1/3).'); return; }
+    setMesaj('');
+    try { await q(sb.from('clienti').update(x).eq('id', id)); await incarca(); reincarcaNom(); }
+    catch (e) { setMesaj(e.message); }
+  }
+  async function adauga(e) {
+    e.preventDefault();
+    if (!nou.trim()) return;
+    try { await q(sb.from('clienti').insert({ nume: nou.trim(), tip: 'necunoscut', activitate: 'necunoscut' })); setNou(''); await incarca(); reincarcaNom(); }
+    catch (er) { setMesaj(er.message); }
+  }
+
+  if (!lista) return <section class="card"><h3>Proiecte</h3>{mesaj ? <p class="eroare">{mesaj}</p> : <p class="gri">Se încarcă…</p>}</section>;
+  const stabilite = lista.filter((c) => c.procent_matei !== null).length;
+  const total = suma(lista, (c) => c.total_ron);
+
+  return (
+    <section class="card">
+      <h3>Proiecte: partea lui Matei</h3>
+      <p class="mic gri" style={{ margin: 0 }}>
+        Fiecare client cu banii încasați de la el în extrase. Scrie la „% Matei” partea lui Matei din profitul proiectului (de exemplu 50, 0 sau 1/3); gol înseamnă încă nestabilit.
+        {' '}{stabilite} din {lista.length} proiecte au procentul stabilit · încasări în total {bani(total, 'RON')}.
+      </p>
+      {mesaj && <p class="eroare">{mesaj}</p>}
+      <table class="tabel">
+        <thead><tr><th>Client</th><th class="n">Încasări</th><th class="n">Total RON</th><th>Perioada</th><th>% Matei</th><th>Al cui</th><th>Notă</th></tr></thead>
+        <tbody>{lista.map((c) => (
+          <tr>
+            <td><b>{c.nume}</b></td>
+            <td class="n">{c.incasari
+              ? <a href="#" onClick={(e) => { e.preventDefault(); mergi('tranzactii', { client: c.id }); }}>{c.incasari}</a>
+              : <span class="gri">—</span>}</td>
+            <td class="n nowrap">{c.incasari ? bani(c.total_ron) : ''}{c.fara_ron > 0 && <div class="mic atentie">+{c.fara_ron} în valută fără curs</div>}</td>
+            <td class="nowrap mic">{c.prima ? (c.prima.slice(0, 7) === c.ultima.slice(0, 7) ? luna(c.prima) : `${luna(c.prima)} – ${luna(c.ultima)}`) : ''}</td>
+            <td><input class="scurt" placeholder="—" value={c.procent_matei === null ? '' : String(c.procent_matei).replace('.', ',')}
+              onChange={(e) => upd(c.id, { procent_matei: procent(e.target.value) })} /></td>
+            <td><select value={c.activitate} onChange={(e) => upd(c.id, { activitate: e.target.value })}>
+              {[['necunoscut', 'Necunoscut'], ['alex', 'Alex'], ['matei', 'Matei'], ['comun', 'Comun']].map(([k, v]) => <option value={k}>{v}</option>)}
+            </select></td>
+            <td><input placeholder="Notă" value={c.nota ?? ''} onChange={(e) => upd(c.id, { nota: e.target.value || null })} /></td>
+          </tr>
+        ))}</tbody>
+      </table>
+      <form class="rand-form" onSubmit={adauga}>
+        <input placeholder="Client nou" value={nou} onInput={(e) => setNou(e.target.value)} />
+        <button>Adaugă</button>
+      </form>
+    </section>
   );
 }
 
