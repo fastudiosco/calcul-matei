@@ -1,0 +1,5 @@
+# Cyber Folks (Apache): fără listare de directoare, fără cache pentru index.html
+Options -Indexes
+<FilesMatch "index\.html$">
+  Header set Cache-Control "no-cache"
+</FilesMatch>
