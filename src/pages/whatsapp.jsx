@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'preact/hooks';
-import { sb, q } from '../supabase.js';
+import { sb, toate as toatePaginat } from '../supabase.js';
+import { ziPlus } from '../format.js';
 
 // Mesajele din WhatsApp din jurul datei unei tranzacții: întâi cele care pomenesc suma.
 export function WhatsappContext({ data, suma }) {
@@ -8,8 +9,8 @@ export function WhatsappContext({ data, suma }) {
   const [eroare, setEroare] = useState('');
 
   useEffect(() => {
-    const zi = (d, n) => { const x = new Date(d + 'T00:00:00'); x.setDate(x.getDate() + n); return x.toISOString().slice(0, 10); };
-    q(sb.from('whatsapp').select('id,la,autor,text').gte('la', zi(data, -3)).lt('la', zi(data, 4)).order('la').limit(1000))
+    setMesaje(null);
+    toatePaginat(() => sb.from('whatsapp').select('id,la,autor,text').gte('la', ziPlus(data, -3)).lt('la', ziPlus(data, 4)).order('la').order('id'))
       .then(setMesaje).catch((e) => setEroare(e.message));
   }, [data]);
 
@@ -40,16 +41,20 @@ export function WhatsappContext({ data, suma }) {
   );
 }
 
-// Parsează exportul WhatsApp (_chat.txt): "[dd/mm/yyyy, HH:MM:SS] Autor: text"
+// Parsează exportul WhatsApp (_chat.txt): "[dd/mm/yyyy, HH:MM:SS] Autor: text".
+// Exportul de pe iPhone termină fiecare mesaj cu CRLF, iar rândurile din interiorul unui mesaj
+// (inclusiv bucăți de conversație lipite sau redirecționate) doar cu LF. Când fișierul are CRLF,
+// doar CRLF poate începe un mesaj nou, ca un fragment lipit să rămână în mesajul care îl conține.
 export function parseazaChat(txt) {
-  const linii = txt.replace(/‎|‏| /g, '').split(/\r?\n/);
-  const re = /^\[(\d{2})\/(\d{2})\/(\d{4}), (\d{2}):(\d{2}):(\d{2})\] ([^:]+): ([\s\S]*)$/;
+  const curat = txt.replace(/[‎‏ ]/g, '');
+  const bucati = curat.includes('\r\n') ? curat.split('\r\n') : curat.split('\n');
+  const re = /^\[(\d{2})\/(\d{2})\/(\d{4}), (\d{2}):(\d{2}):(\d{2})\] ([^:\n]+):(?: ([\s\S]*))?$/;
   const rez = [];
   let ultim = null;
-  for (const l of linii) {
+  for (const l of bucati) {
     const m = re.exec(l);
     if (m) {
-      ultim = { la: `${m[3]}-${m[2]}-${m[1]}T${m[4]}:${m[5]}:${m[6]}`, autor: m[7].trim(), text: m[8] };
+      ultim = { la: `${m[3]}-${m[2]}-${m[1]}T${m[4]}:${m[5]}:${m[6]}`, autor: m[7].trim(), text: m[8] || '' };
       rez.push(ultim);
     } else if (ultim) {
       ultim.text += '\n' + l;

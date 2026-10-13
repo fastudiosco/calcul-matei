@@ -2,6 +2,7 @@ import { useContext, useEffect, useState } from 'preact/hooks';
 import { sb, q, toate } from '../supabase.js';
 import { Ctx } from '../app.jsx';
 import { bani, data, luna } from '../format.js';
+import { VERIFICARI_BANI } from './prezentare.jsx';
 
 const TITLURI = {
   extras_nereconciliat: 'Extrase care nu se reconciliază cu liniile din baza de date',
@@ -9,11 +10,16 @@ const TITLURI = {
   semn_gresit: 'Suma în RON are alt semn decât suma originală',
   transfer_fara_pereche: 'Transferuri interne fără linia pereche',
   transfer_nu_se_anuleaza: 'Transferuri interne care nu se anulează',
-  cost_recurent: 'Costuri recurente confirmate fără exact o plată în lună',
+  cost_recurent: 'Costuri recurente confirmate cu alt număr de plăți decât cel așteptat în lună',
   alocare_incompleta: 'Alocări de colaboratori care nu fac 100%',
   manual_fara_ron: 'Elemente manuale fără sumă în RON',
   rambursare_fara_ron: 'Rambursări fără sumă în RON',
+  rambursare_legata: 'Rambursări legate de o linie care nu e confirmată ca 100% Matei',
+  tva_lipsa: 'Încasări și plăți către colaboratori din aug 2026 fără TVA completat',
+  ron_diferit_de_curs: 'Suma în RON nu se potrivește cu cursul',
 };
+// Doar acestea opresc închiderea unei luni: schimbă suma. Restul sunt semnale pentru verificat.
+const BLOCHEAZA = new Set(VERIFICARI_BANI);
 
 export function Verificari() {
   const { nom } = useContext(Ctx);
@@ -68,8 +74,24 @@ export function Verificari() {
   for (const v of lista || []) (grupe[v.verificare] ||= []).push(v);
   const cont = (id) => nom.conturi.find((c) => c.id === id);
 
+  const ordine = Object.entries(grupe).sort((a, b) => BLOCHEAZA.has(b[0]) - BLOCHEAZA.has(a[0]));
   return (
     <div>
+      <h1 class="titlu">Verificări</h1>
+      <p class="intro">Ce nu se leagă în date. Problemele marcate „schimbă suma” opresc închiderea lunii până sunt rezolvate.</p>
+      {!lista ? <p class="gri">Se încarcă…</p> : ordine.length === 0 ? <p class="ok">Nicio problemă găsită.</p> : ordine.map(([k, l]) => (
+        <section class="card">
+          <h3>{TITLURI[k] || k} <span class="gri">({l.length})</span> {BLOCHEAZA.has(k) && <span class="eticheta-stare intrebare">schimbă suma</span>}</h3>
+          <ul class="verificari">{l.slice(0, 200).map((v) => (
+            <li>
+              {v.luna && <span class="gri">{luna(v.luna)} · </span>}
+              {v.tranzactie_id ? <a href={`#/tranzactii?id=${v.tranzactie_id}&luna=${v.luna || ''}`}>#{v.tranzactie_id}</a> : null} {v.detaliu}
+            </li>
+          ))}</ul>
+          {l.length > 200 && <p class="gri mic">… și încă {l.length - 200}</p>}
+        </section>
+      ))}
+
       <section class="card">
         <h3>Extrase încărcate</h3>
         <table class="tabel">
@@ -93,18 +115,6 @@ export function Verificari() {
         {mesaj && <p class="mesaj">{mesaj}</p>}
       </section>
 
-      {!lista ? <p>Se încarcă…</p> : Object.keys(grupe).length === 0 ? <p class="ok">Nicio problemă găsită.</p> : Object.entries(grupe).map(([k, l]) => (
-        <section class="card">
-          <h3>{TITLURI[k] || k} <span class="gri">({l.length})</span></h3>
-          <ul class="verificari">{l.slice(0, 200).map((v) => (
-            <li>
-              {v.luna && <span class="gri">{luna(v.luna)} · </span>}
-              {v.tranzactie_id ? <a href={`#/tranzactii?id=${v.tranzactie_id}&luna=${v.luna || ''}`}>#{v.tranzactie_id}</a> : null} {v.detaliu}
-            </li>
-          ))}</ul>
-          {l.length > 200 && <p class="gri mic">… și încă {l.length - 200}</p>}
-        </section>
-      ))}
     </div>
   );
 }
