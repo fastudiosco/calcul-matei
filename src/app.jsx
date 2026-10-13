@@ -11,18 +11,20 @@ import { Verificari } from './pages/verificari.jsx';
 import { Raport } from './pages/raport.jsx';
 import { Jurnal } from './pages/jurnal.jsx';
 import { Import } from './pages/import.jsx';
+import logoAlb from './assets/fastudios-light.svg';
 
 export const Ctx = createContext(null);
 
+// [cheie, titlu, pagină, principală]: cele principale sunt munca de zi cu zi, restul sunt unelte.
 const PAGINI = [
-  ['prezentare', 'Prezentare', Prezentare],
-  ['tranzactii', 'Tranzacții', Tranzactii],
-  ['intrebari', 'Întrebări', Intrebari],
-  ['manual', 'Manual', Manual],
-  ['nomenclatoare', 'Nomenclatoare', Nomenclatoare],
+  ['prezentare', 'Rezumat', Prezentare, true],
+  ['tranzactii', 'Tranzacții', Tranzactii, true],
+  ['intrebari', 'Întrebări', Intrebari, true],
+  ['raport', 'Raport pentru Matei', Raport, true],
+  ['manual', 'Sume manuale', Manual],
+  ['nomenclatoare', 'Proiecte și costuri', Nomenclatoare],
   ['verificari', 'Verificări', Verificari],
-  ['raport', 'Raport', Raport],
-  ['jurnal', 'Jurnal', Jurnal],
+  ['jurnal', 'Istoric', Jurnal],
   ['import', 'Import', Import],
 ];
 
@@ -92,13 +94,13 @@ export function App() {
   return (
     <Ctx.Provider value={{ nom, reincarcaNom: incarcaNom, email }}>
       <header class="sus">
-        <b class="logo">Calcul Matei</b>
+        <a class="marca" href="#/prezentare"><img src={logoAlb} alt="FA Studios" /><span>Calcul Matei</span></a>
         <nav>
-          {PAGINI.map(([k, t]) => (
-            <a href={`#/${k}`} class={ruta.pagina === k ? 'activ' : ''}>{t}</a>
-          ))}
+          {PAGINI.filter((p) => p[3]).map(([k, t]) => <a href={`#/${k}`} class={ruta.pagina === k ? 'activ' : ''}>{t}</a>)}
+          <i class="sep" />
+          {PAGINI.filter((p) => !p[3]).map(([k, t]) => <a href={`#/${k}`} class={`secundar ${ruta.pagina === k ? 'activ' : ''}`}>{t}</a>)}
         </nav>
-        <span class="user">{email} <button class="mic" onClick={() => sb.auth.signOut()}>Ieșire</button></span>
+        <span class="user"><span>{email}</span> <button class="mic" onClick={() => sb.auth.signOut()}>Ieșire</button></span>
       </header>
       <main><Pagina params={ruta.params} key={ruta.pagina} /></main>
     </Ctx.Provider>

@@ -1,18 +1,23 @@
 import { useContext, useEffect, useState } from 'preact/hooks';
 import { sb, q } from '../supabase.js';
 import { Ctx } from '../app.jsx';
-import { bani, luna, LUNI, IMPARTIRI } from '../format.js';
+import { bani, luna, LUNI, IMPARTIRI, citesteSuma, citesteProcent } from '../format.js';
 
-const num = (x) => (x === '' || x === null || x === undefined ? null : Number(String(x).replace(',', '.')));
+// Valori din tabel: sume și procente citite strict; ce nu e număr rămâne neschimbat.
+const num = (x) => { const v = citesteSuma(x); return v === undefined ? NaN : v; };
+const procent = (x) => (String(x ?? '').trim() === '' ? null : citesteProcent(x) ?? NaN);
 
 export function Nomenclatoare() {
   return (
     <div>
+      <h1 class="titlu">Proiecte și costuri</h1>
+      <p class="intro">Clienții și procentul lui Matei pe fiecare proiect, costurile recurente, colaboratorii și categoriile.</p>
+      <Simplu tabel="clienti" titlu="Clienți și proiecte" campuri={[['nume', 'Nume'], ['procent_matei', '% Matei', null, procent], ['cui', 'CUI'], ['tip', 'Tip', ['necunoscut', 'retainer', 'one_time', 'mixt']],
+        ['activitate', 'Al cui', ['necunoscut', 'alex', 'matei', 'comun']], ['nota', 'Notă']]}
+        nota="„% Matei” e partea lui Matei din profitul proiectului. Se propune pe liniile legate de client, dar fiecare linie se confirmă separat. Gol = încă nestabilit." />
       <Costuri />
       <Alocari />
       <Simplu tabel="colaboratori" titlu="Colaboratori" campuri={[['nume', 'Nume'], ['nota', 'Notă']]} />
-      <Simplu tabel="clienti" titlu="Clienți" campuri={[['nume', 'Nume'], ['cui', 'CUI'], ['tip', 'Tip', ['necunoscut', 'retainer', 'one_time', 'mixt']],
-        ['activitate', 'Al cui', ['necunoscut', 'alex', 'matei', 'comun']], ['nota', 'Notă']]} />
       <Simplu tabel="categorii" titlu="Categorii" cheie="cod" campuri={[['cod', 'Cod'], ['eticheta', 'Etichetă'], ['ordine', 'Ordine']]} />
     </div>
   );
@@ -24,6 +29,7 @@ function Costuri() {
   const [nou, setNou] = useState({ nume: '', suma: '', moneda: 'RON', zi_luna: '', impartire: 'necunoscut' });
 
   async function salveaza(c, upd) {
+    if (Object.values(upd).some((x) => Number.isNaN(x))) { setMesaj('Valoarea nu e un număr.'); return; }
     try { await q(sb.from('costuri_recurente').update(upd).eq('id', c.id)); reincarcaNom(); setMesaj(''); }
     catch (e) { setMesaj(e.message); }
   }
@@ -38,20 +44,22 @@ function Costuri() {
   return (
     <section class="card">
       <h3>Costuri recurente</h3>
-      <p class="mic gri">Doar costurile bifate „confirmat” intră în verificarea „exact o plată pe lună”. Plățile reale se leagă de cost din panoul fiecărei tranzacții.</p>
+      <p class="mic gri">Doar costurile bifate „confirmat” intră în verificarea numărului de plăți pe lună (ex. mașina lui Matei: 2 facturi pe lună, RCI Broker și RCI Leasing). Plățile reale se leagă de cost din panoul fiecărei tranzacții.</p>
       {mesaj && <p class="eroare">{mesaj}</p>}
+      <div class="tabel-lat">
       <table class="tabel">
-        <thead><tr><th>Nume</th><th class="n">Sumă</th><th>Zi</th><th>Împărțire</th><th>%M</th><th>Cont</th><th>Prima lună</th><th>Ultima lună</th><th>Notă</th><th>Confirmat</th></tr></thead>
+        <thead><tr><th>Nume</th><th class="n">Sumă</th><th>Zi</th><th>Plăți/lună</th><th>Împărțire</th><th>%M</th><th>Cont</th><th>Prima lună</th><th>Ultima lună</th><th>Notă</th><th>Confirmat</th></tr></thead>
         <tbody>{nom.costuri.map((c) => (
           <tr>
             <td><input value={c.nume} onChange={(e) => salveaza(c, { nume: e.target.value })} /></td>
             <td class="n nowrap"><input class="scurt" value={c.suma} onChange={(e) => salveaza(c, { suma: num(e.target.value) })} /> {c.moneda}</td>
             <td><input class="scurt" value={c.zi_luna ?? ''} onChange={(e) => salveaza(c, { zi_luna: num(e.target.value) })} /></td>
+            <td><input class="scurt" value={c.plati_pe_luna} onChange={(e) => salveaza(c, { plati_pe_luna: num(e.target.value) })} /></td>
             <td><select value={c.impartire} onChange={(e) => salveaza(c, { impartire: e.target.value })}>
               <option value="necunoscut">Necunoscut</option>
               {Object.entries(IMPARTIRI).map(([k, v]) => <option value={k}>{v}</option>)}
             </select></td>
-            <td><input class="scurt" value={c.procent_matei ?? ''} onChange={(e) => salveaza(c, { procent_matei: num(e.target.value) })} /></td>
+            <td><input class="scurt" value={c.procent_matei ?? ''} onChange={(e) => salveaza(c, { procent_matei: procent(e.target.value) })} /></td>
             <td><select value={c.cont_id ?? ''} onChange={(e) => salveaza(c, { cont_id: num(e.target.value) })}>
               <option value="">—</option>
               {nom.conturi.map((x) => <option value={x.id}>{x.cod}</option>)}
@@ -67,6 +75,7 @@ function Costuri() {
           </tr>
         ))}</tbody>
       </table>
+      </div>
       <form class="rand-form" onSubmit={adauga}>
         <input required placeholder="Nume cost nou" value={nou.nume} onInput={(e) => setNou({ ...nou, nume: e.target.value })} />
         <input required placeholder="Sumă" value={nou.suma} onInput={(e) => setNou({ ...nou, suma: e.target.value })} />
@@ -96,9 +105,11 @@ function Alocari() {
 
   async function adauga(e) {
     e.preventDefault(); setMesaj('');
+    const p = procent(f.procent);
+    if (p === null || Number.isNaN(p)) { setMesaj('Procentul trebuie să fie între 0 și 100.'); return; }
     try {
       await q(sb.from('alocari').insert({ luna: l, colaborator_id: Number(f.colaborator_id), sursa_tip: f.sursa_tip,
-        client_id: f.sursa_tip === 'client' ? Number(f.client_id) : null, procent: num(f.procent) }));
+        client_id: f.sursa_tip === 'client' ? Number(f.client_id) : null, procent: p }));
       setF({ ...f, procent: '' }); incarca();
     } catch (er) { setMesaj(er.message); }
   }
@@ -144,7 +155,7 @@ function Alocari() {
   );
 }
 
-function Simplu({ tabel, titlu, campuri, cheie = 'id' }) {
+function Simplu({ tabel, titlu, campuri, cheie = 'id', nota }) {
   const { reincarcaNom } = useContext(Ctx);
   const [lista, setLista] = useState([]);
   const [nou, setNou] = useState({});
@@ -152,22 +163,29 @@ function Simplu({ tabel, titlu, campuri, cheie = 'id' }) {
   const incarca = async () => setLista(await q(sb.from(tabel).select('*').order(campuri[0][0])));
   useEffect(() => { incarca().catch((e) => setMesaj(e.message)); }, []);
 
+  const valoare = (k, v) => { const c = campuri.find((x) => x[0] === k); return c?.[3] ? c[3](v) : v === '' ? null : v; };
   async function upd(r, k, v) {
-    try { await q(sb.from(tabel).update({ [k]: v === '' ? null : v }).eq(cheie, r[cheie])); incarca(); reincarcaNom(); }
+    const x = valoare(k, v);
+    if (Number.isNaN(x)) { setMesaj(`„${v}” nu e un procent între 0 și 100.`); return; }
+    setMesaj('');
+    try { await q(sb.from(tabel).update({ [k]: x }).eq(cheie, r[cheie])); incarca(); reincarcaNom(); }
     catch (e) { setMesaj(e.message); }
   }
   async function adauga(e) {
     e.preventDefault();
-    try { await q(sb.from(tabel).insert(nou)); setNou({}); incarca(); reincarcaNom(); }
+    const r = Object.fromEntries(Object.entries(nou).map(([k, v]) => [k, valoare(k, v)]));
+    if (Object.values(r).some((x) => Number.isNaN(x))) { setMesaj('O valoare nu e validă.'); return; }
+    try { await q(sb.from(tabel).insert(r)); setNou({}); incarca(); reincarcaNom(); }
     catch (er) { setMesaj(er.message); }
   }
   const camp = (r, [k, eticheta, opt], onCh) => opt
     ? <select value={r[k] ?? opt[0]} onChange={(e) => onCh(e.target.value)}>{opt.map((o) => <option>{o}</option>)}</select>
-    : <input placeholder={eticheta} value={r[k] ?? ''} onChange={(e) => onCh(e.target.value)} />;
+    : <input class={k === 'procent_matei' ? 'scurt' : ''} placeholder={eticheta} value={r[k] === null || r[k] === undefined ? '' : String(r[k]).replace('.', ',')} onChange={(e) => onCh(e.target.value)} />;
 
   return (
     <section class="card">
       <h3>{titlu}</h3>
+      {nota && <p class="mic gri" style={{ margin: 0 }}>{nota}</p>}
       {mesaj && <p class="eroare">{mesaj}</p>}
       <table class="tabel">
         <thead><tr>{campuri.map((c) => <th>{c[1]}</th>)}</tr></thead>

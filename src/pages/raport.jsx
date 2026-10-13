@@ -2,6 +2,8 @@ import { useContext, useEffect, useState } from 'preact/hooks';
 import { sb, q, toate } from '../supabase.js';
 import { Ctx } from '../app.jsx';
 import { bani, data, luna, suma, IMPARTIRI, csv, descarca } from '../format.js';
+import { procentAfisat } from './editor.jsx';
+import logo from '../assets/fastudios-dark.svg';
 
 // Raportul pentru Matei: doar ce e confirmat, cu fiecare linie care are efect.
 export function Raport() {
@@ -36,7 +38,7 @@ export function Raport() {
     descarca('raport_calcul_matei.csv', csv(d.linii, [
       ['data_extras', 'Data'], ['cont_nume', 'Cont'], ['contrapartida', 'Contrapartidă'], ['descriere', 'Descriere'],
       [(r) => cat(r.categorie), 'Categorie'], ['suma', 'Sumă'], ['moneda', 'Monedă'], ['suma_ron', 'Sumă RON'], ['curs', 'Curs'], ['sursa_curs', 'Sursa cursului'],
-      [(r) => IMPARTIRI[r.impartire], 'Împărțire'], ['procent_matei', '% Matei'], ['efect_matei', 'Matei datorează (RON)'], ['nota', 'Notă / dovadă'],
+      ['tva_ron', 'TVA inclus (RON)'], [(r) => IMPARTIRI[r.impartire], 'Împărțire'], [(r) => procentAfisat(r), '% Matei'], ['efect_matei', 'Matei datorează (RON)'], ['nota', 'Notă / dovadă'],
       ['confirmat_de', 'Confirmat de'], ['confirmat_la', 'Confirmat la'],
     ]));
   }
@@ -47,10 +49,17 @@ export function Raport() {
         <button onClick={() => window.print()}>Printează / PDF</button>
         <button onClick={exporta}>Export CSV cu toate liniile</button>
       </div>
-      <h1>Calcul Alex – Matei, noiembrie 2025 – octombrie 2026</h1>
-      <p class="gri">Generat la {new Date().toLocaleString('ro-RO')}. Conține doar elemente confirmate.</p>
+      <img src={logo} alt="FA Studios" style={{ height: '20px', marginTop: '8px' }} />
+      <h1 class="titlu">Calcul Alex – Matei, noiembrie 2025 – octombrie 2026</h1>
+      <p class="gri">Generat la {new Date().toLocaleString('ro-RO')}. Conține doar elemente confirmate, fiecare cu dovada ei.</p>
       {deschise.length > 0 && <p class="atentie">Atenție: {deschise.length} luni nu sunt încă închise ({deschise.map((l) => luna(l.luna)).join(', ')}). Suma poate să se schimbe.</p>}
-      <div class="cifra"><div><div class="eticheta">Matei datorează lui Alex</div><div class="mare">{bani(total, 'RON')}</div></div></div>
+      <section class="erou" style={{ gridTemplateColumns: '1fr' }}>
+        <div class="principal">
+          <div class="eticheta">{total >= 0 ? 'Matei datorează lui Alex' : 'Alex datorează lui Matei'}</div>
+          <div class="mare">{bani(Math.abs(total))}<small>RON</small></div>
+          <div class="sub">Din august 2026 sumele sunt fără TVA. Plățile către Matei, mama lui, Antonia și TH Media contează 100% ale lui.</div>
+        </div>
+      </section>
 
       <h2>Pe luni</h2>
       <table class="tabel">
@@ -94,11 +103,12 @@ export function Raport() {
 
       <h2>Toate liniile cu efect ({d.linii.length})</h2>
       <table class="tabel mic">
-        <thead><tr><th>Data</th><th>Cont</th><th>Contrapartidă</th><th>Categorie</th><th class="n">Sumă</th><th>Împărțire</th><th class="n">Matei datorează</th><th>Notă</th></tr></thead>
+        <thead><tr><th>Data</th><th>Cont</th><th>Contrapartidă</th><th>Categorie</th><th class="n">Sumă</th><th class="n">TVA</th><th>Împărțire</th><th class="n">Matei datorează</th><th>Dovadă</th></tr></thead>
         <tbody>{d.linii.map((l) => (
           <tr><td class="nowrap">{data(l.data_extras)}</td><td class="nowrap">{l.cont_cod}</td><td>{l.contrapartida}</td><td>{cat(l.categorie)}</td>
-            <td class="n nowrap">{bani(l.suma, l.moneda)}</td>
-            <td>{l.impartire === 'procent' ? `${l.procent_matei}% Matei` : IMPARTIRI[l.impartire]}</td>
+            <td class="n nowrap">{bani(l.suma, l.moneda)}{l.moneda !== 'RON' && <div class="gri">{bani(l.suma_ron, 'RON')}</div>}</td>
+            <td class="n nowrap">{l.tva_ron ? bani(l.tva_ron) : ''}</td>
+            <td>{l.impartire === 'procent' ? `${procentAfisat(l)}% Matei` : IMPARTIRI[l.impartire]}</td>
             <td class="n nowrap">{bani(l.efect_matei)}</td><td>{l.nota}</td></tr>
         ))}</tbody>
       </table>

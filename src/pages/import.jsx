@@ -5,7 +5,8 @@ import { bani, data } from '../format.js';
 import { parseazaChat } from './whatsapp.jsx';
 
 // Importă fișierul pregătit din extrase (format calcul-matei/extrase@1).
-// Baza de date verifică din nou totalurile și soldurile; un extras deja importat e sărit.
+// Baza de date verifică din nou totalurile și soldurile; un extras deja importat e sărit,
+// iar un extras care acoperă o perioadă deja importată în același cont e refuzat.
 export function Import() {
   const { nom } = useContext(Ctx);
   const [fisier, setFisier] = useState(null);
@@ -39,7 +40,8 @@ export function Import() {
   const cont = (cod) => nom.conturi.find((c) => c.cod === cod)?.nume || cod;
   return (
     <div>
-      <p class="explicatie">Încarcă fișierul de import pregătit din extrasele băncilor. Fiecare extras se verifică din nou în baza de date (total intrări, total ieșiri, sold final și, unde există, soldul după fiecare linie) și intră tot sau deloc. Un extras deja importat nu se dublează.</p>
+      <h1 class="titlu">Import</h1>
+      <p class="intro">Încarcă fișierul de import pregătit din extrasele băncilor. Fiecare extras se verifică din nou în baza de date (total intrări, total ieșiri, sold final și, unde există, soldul după fiecare linie) și intră tot sau deloc. Același extras încărcat de două ori e sărit; un extras care se suprapune cu o perioadă deja importată din același cont e refuzat, ca nicio linie să nu se numere de două ori. Pentru luna curentă, importă doar zilele noi.</p>
       <input type="file" accept=".json,application/json" onChange={citeste} />
       {eroare && <p class="eroare">{eroare}</p>}
       {fisier && (
@@ -71,12 +73,15 @@ function ImportWhatsapp() {
     setStare(m.length ? `${m.length} mesaje, de la ${m[0].la.slice(0, 10)} la ${m[m.length - 1].la.slice(0, 10)}.` : 'Nu am găsit mesaje în fișier.');
   }
   async function importa() {
+    const numara = async () => (await sb.from('whatsapp').select('id', { count: 'exact', head: true })).count;
+    const inainte = await numara();
     for (let i = 0; i < mesaje.length; i += 1000) {
       setStare(`Se încarcă ${i} / ${mesaje.length}…`);
       const { error } = await sb.from('whatsapp').upsert(mesaje.slice(i, i + 1000), { onConflict: 'la,autor,hash', ignoreDuplicates: true });
       if (error) { setStare('❌ ' + error.message); return; }
     }
-    setStare(`✓ Gata: ${mesaje.length} mesaje (cele deja încărcate au fost sărite).`);
+    const noi = (await numara()) - inainte;
+    setStare(`✓ Gata: ${noi} mesaje noi. Celelalte ${mesaje.length - noi} erau deja încărcate sau repetate în aceeași secundă (ex. „image omitted”).`);
   }
 
   return (

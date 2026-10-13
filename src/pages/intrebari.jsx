@@ -30,9 +30,11 @@ export function Intrebari({ params }) {
 
   return (
     <div>
-      <div class="filtre">
+      <h1 class="titlu">Întrebări</h1>
+      <p class="intro">Ce nu e clar și trebuie lămurit înainte de confirmare. O întrebare generală deschisă oprește închiderea oricărei luni.</p>
+      <div class="file">
         {[['deschisa', 'Deschise'], ['raspunsa', 'Cu răspuns'], ['rezolvata', 'Rezolvate'], ['', 'Toate']].map(([k, t]) => (
-          <button class={stare === k ? 'primar mic' : 'mic'} onClick={() => mergi('intrebari', { stare: k })}>{t}</button>
+          <button class={`mic ${stare === k ? 'activ' : ''}`} onClick={() => mergi('intrebari', { stare: k })}>{t}</button>
         ))}
       </div>
       <form class="card" onSubmit={adauga}>
@@ -66,7 +68,7 @@ function Intrebare({ i, email, gata }) {
       {i.detalii && <div>{i.detalii}</div>}
       {t && (
         <div class="mic">
-          <a href={`#/tranzactii?id=${t.id}&q=${encodeURIComponent(String(Math.abs(t.suma)))}`}>Linia #{t.id}</a>
+          <a href={`#/tranzactii?id=${t.id}&luna=${t.data_extras.slice(0, 7)}-01`}>Linia #{t.id}</a>
           {' '}· {data(t.data_extras)} · <b>{bani(t.suma, t.moneda)}</b> · <span class="gri">{t.descriere.slice(0, 140)}</span>
         </div>
       )}
