@@ -3,6 +3,7 @@ import { sb, q } from '../supabase.js';
 import { Ctx } from '../app.jsx';
 import { bani, data, dataOra, STARI, IMPARTIRI, citesteSuma, citesteCurs, citesteProcent, rotunjeste, ziPlus, efectLinie } from '../format.js';
 import { WhatsappContext } from './whatsapp.jsx';
+import { celalalt, numeMembru, INTREBARI_RAPIDE } from '../membri.js';
 
 const CAMPURI = ['stare', 'categorie', 'impartire', 'contrapartida', 'client_id', 'colaborator_id',
   'cost_recurent_id', 'pereche_id', 'suma_ron', 'tva_ron', 'curs', 'sursa_curs', 'nota'];
@@ -25,7 +26,7 @@ export function procentAfisat(r) {
 const egal = (a, b) => (a ?? null) === (b ?? null) || (a !== null && b !== null && a !== undefined && b !== undefined && Number(a) === Number(b) && !isNaN(Number(a)));
 
 export function Editor({ id, inchide, salvat, urmator, anterior, filtreaza }) {
-  const { nom } = useContext(Ctx);
+  const { nom, email } = useContext(Ctx);
   const [t, setT] = useState(null);
   const [v, setV] = useState(null);
   const [ronManual, setRonManual] = useState(false);
@@ -88,6 +89,8 @@ export function Editor({ id, inchide, salvat, urmator, anterior, filtreaza }) {
     && Math.abs(ron - t.suma * curs) > Math.max(0.01, Math.abs(ron) * 0.005);
   const cuTva = t.data_extras >= '2026-08-01' && t.titular === 'firma';
   const client = nom.clienti.find((c) => String(c.id) === String(v.client_id));
+  const destinatar = celalalt(nom, email);
+  const deschise = intrebari.filter((i) => i.stare !== 'rezolvata');
 
   function construieste() {
     if (strain && curs === undefined) return 'Cursul nu e un număr (ex. 5,0889).';
@@ -138,13 +141,34 @@ export function Editor({ id, inchide, salvat, urmator, anterior, filtreaza }) {
     } catch (e) { setMesaj(e.message); }
   }
 
+  // Salvează ce ai completat până acum (chiar dacă nu e complet) și lasă întrebarea pentru celălalt membru.
   async function adaugaIntrebare() {
-    if (!nouaIntrebare.trim()) return;
+    setMesaj('');
+    if (!nouaIntrebare.trim()) { setMesaj('Scrie întrebarea (sau alege una de mai sus).'); return; }
+    const upd = construieste();
+    if (typeof upd === 'string') { setMesaj(upd); return; }
+    upd.stare = 'intrebare';
     try {
-      // Întâi starea liniei: dacă luna e închisă, se oprește aici și nu rămâne o întrebare agățată.
-      await q(sb.from('clasificari').update({ stare: 'intrebare' }).eq('tranzactie_id', id));
-      await q(sb.from('intrebari').insert({ tranzactie_id: id, titlu: nouaIntrebare.trim() }));
+      // Întâi linia: dacă luna e închisă, se oprește aici și nu rămâne o întrebare agățată.
+      await q(sb.from('clasificari').update(upd).eq('tranzactie_id', id));
+      await q(sb.from('intrebari').insert({ tranzactie_id: id, titlu: nouaIntrebare.trim(), pentru: destinatar?.email || null }));
       setNouaIntrebare('');
+      salvat(); incarca();
+      setMesaj(`Întrebarea a ajuns la ${destinatar?.nume || 'celălalt membru'}. Clasificarea ta a rămas salvată.`);
+    } catch (e) { setMesaj(mesajEroare(e.message)); }
+  }
+
+  async function raspunde(i, text, rezolva) {
+    if (!text.trim()) return 'Scrie răspunsul.';
+    const upd = { raspuns: text.trim(), stare: rezolva ? 'rezolvata' : 'raspunsa' };
+    if (rezolva) { upd.rezolvat_de = email; upd.rezolvat_la = new Date().toISOString(); }
+    try { await q(sb.from('intrebari').update(upd).eq('id', i.id)); salvat(); incarca(); return ''; }
+    catch (e) { return e.message; }
+  }
+
+  async function rezolva(i) {
+    try {
+      await q(sb.from('intrebari').update({ stare: 'rezolvata', rezolvat_de: email, rezolvat_la: new Date().toISOString() }).eq('id', i.id));
       salvat(); incarca();
     } catch (e) { setMesaj(e.message); }
   }
@@ -167,6 +191,9 @@ export function Editor({ id, inchide, salvat, urmator, anterior, filtreaza }) {
         {' '}· <span class={`eticheta-stare ${t.stare}`}>{STARI[t.stare]}</span>
       </div>
       <pre class="descriere-completa">{t.descriere}</pre>
+      {deschise.length > 0 && (
+        <div class="intrebare-sus">? {deschise.length === 1 ? 'O întrebare deschisă' : `${deschise.length} întrebări deschise`} la linia asta, vezi mai jos.</div>
+      )}
       {t.contrapartida && <button class="link mic" onClick={() => filtreaza(t.contrapartida)}>Toate liniile cu „{t.contrapartida}”</button>}
 
       <div class="bloc">
@@ -274,18 +301,24 @@ export function Editor({ id, inchide, salvat, urmator, anterior, filtreaza }) {
         {mesaj && <p class="eroare">{mesaj}</p>}
       </div>
 
-      <div class="bloc">
-        <h4>Întrebări</h4>
+      <div class={`bloc intrebari-linie ${deschise.length ? 'are' : ''}`}>
+        <h4>Nu ești sigur? Întreabă-l pe {destinatar?.nume || 'celălalt membru'}</h4>
         {intrebari.map((i) => (
-          <div class={`intrebare ${i.stare}`}>
-            <b>{i.titlu}</b> <span class="gri mic">({i.stare}, {i.creat_de})</span>
-            {i.raspuns && <div>→ {i.raspuns} <span class="gri mic">({i.sursa_raspuns})</span></div>}
-          </div>
+          <IntrebareLinie i={i} nom={nom} email={email} raspunde={raspunde} rezolva={rezolva} />
         ))}
-        <div class="rand">
-          <input placeholder="Ce nu e clar la linia asta?" value={nouaIntrebare} onInput={(e) => setNouaIntrebare(e.target.value)} />
-          <button class="mic" onClick={adaugaIntrebare}>Întreabă</button>
+        <div class="rapide">
+          {INTREBARI_RAPIDE.map((x) => (
+            <button type="button" class={`mic ${nouaIntrebare === x ? 'activ' : ''}`} onClick={() => setNouaIntrebare(x)}>{x}</button>
+          ))}
         </div>
+        <textarea rows="2" placeholder={`Ce nu știi despre linia asta? ${destinatar?.nume || 'Celălalt membru'} îți răspunde când are timp.`}
+          value={nouaIntrebare} onInput={(e) => setNouaIntrebare(e.target.value)} />
+        <div class="actiuni">
+          <button class="semnal" onClick={adaugaIntrebare} title="Salvează ce ai completat mai sus și lasă întrebarea">
+            ? Salvează și întreabă-l pe {destinatar?.nume || 'celălalt'}
+          </button>
+        </div>
+        <p class="gri mic">Poți completa doar ce știi (ex. categoria) și lăsa restul. Când întrebarea e rezolvată, linia revine la „Propus”.</p>
       </div>
 
       <div class="bloc">
@@ -298,6 +331,34 @@ export function Editor({ id, inchide, salvat, urmator, anterior, filtreaza }) {
         <Istoric intrari={istoric} />
       </div>
     </aside>
+  );
+}
+
+function IntrebareLinie({ i, nom, email, raspunde, rezolva }) {
+  const [text, setText] = useState('');
+  const [err, setErr] = useState('');
+  const pentruMine = !i.pentru || i.pentru.toLowerCase() === (email || '').toLowerCase();
+  const eAMea = (i.creat_de || '').toLowerCase() === (email || '').toLowerCase();
+  const trimite = async (rez) => setErr(await raspunde(i, text, rez));
+  return (
+    <div class={`intrebare ${i.stare}`}>
+      <b>{i.titlu}</b>
+      <div class="gri mic">
+        {numeMembru(nom, i.creat_de)}{i.pentru ? ` → ${numeMembru(nom, i.pentru)}` : ''} · {dataOra(i.creat_la)} · {i.stare === 'deschisa' ? 'așteaptă răspuns' : i.stare === 'raspunsa' ? 'are răspuns' : 'rezolvată'}
+      </div>
+      {i.raspuns && <div class="raspuns">→ {i.raspuns}</div>}
+      {i.stare === 'deschisa' && pentruMine && (
+        <div class="rand">
+          <input placeholder="Răspunsul tău" value={text} onInput={(e) => setText(e.target.value)} />
+          <button class="mic" onClick={() => trimite(false)} title="Celălalt îl citește și actualizează linia">Răspunde</button>
+          <button class="mic primar" onClick={() => trimite(true)} title="Răspunde și închide întrebarea">Răspunde și rezolvă</button>
+        </div>
+      )}
+      {i.stare === 'raspunsa' && (eAMea || pentruMine) && (
+        <button class="mic" onClick={() => rezolva(i)}>Am înțeles, rezolvată</button>
+      )}
+      {err && <p class="eroare">{err}</p>}
+    </div>
   );
 }
 

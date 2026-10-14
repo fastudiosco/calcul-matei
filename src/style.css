@@ -211,3 +211,18 @@ details.cum p, details.cum li { color: var(--ink-2); max-width: 860px; }
   .raport h2 { page-break-after: avoid; }
   .erou .principal { color: var(--ink); background: #fff; border: 1px solid var(--ink); }
 }
+
+/* Întrebări pe linie (Robert ↔ Alex) */
+.intrebari-linie.are { background: #fffcf2; border-radius: 12px; padding: 10px 12px; }
+.intrebari-linie textarea { width: 100%; margin-top: 6px; }
+.rapide { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.rapide button { font-size: 12px; padding: 5px 9px; }
+.rapide button.activ { background: var(--galben-fond); border-color: #d9a400; color: var(--galben); }
+button.semnal { background: var(--galben-fond); color: var(--galben); border-color: #d9a400; font-weight: 600; }
+button.semnal:hover { background: #f6e4b0; }
+.intrebare .raspuns { margin-top: 4px; }
+.intrebare .rand { margin-top: 6px; }
+.intrebare-sus { margin: 8px 0; padding: 6px 10px; border-radius: 8px; background: var(--galben-fond); color: var(--galben); font-size: 13px; font-weight: 600; }
+.intrebare .clasificare { margin-top: 4px; }
+.bulk .intreaba { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; border-left: 1px solid #4a4a48; padding-left: 10px; margin-left: 4px; }
+.bulk .intreaba input { min-width: 220px; }
