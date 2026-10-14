@@ -25,7 +25,8 @@ export function Tranzactii({ params }) {
     setEroare('');
     try {
       const r = await toate(() => {
-        let x = sb.from('v_tranzactii').select('*').order('data_extras').order('id');
+        // Ordinea zilelor din lună după data afișată (data plății), apoi după data din extras.
+        let x = sb.from('v_tranzactii').select('*').order('data_reala').order('data_extras').order('id');
         if (f.luna) x = x.eq('luna', f.luna);
         if (f.cont) x = x.eq('cont_cod', f.cont);
         if (f.stare) x = x.eq('stare', f.stare);
@@ -137,7 +138,10 @@ export function Tranzactii({ params }) {
               {randuri.map((r) => (
                 <tr class={`${deschis === r.id ? 'selectat' : ''} ${r.stare}`} onClick={() => setDeschis(r.id)}>
                   <td onClick={(e) => e.stopPropagation()}><input type="checkbox" checked={sel.has(r.id)} onChange={() => comuta(r.id)} /></td>
-                  <td class="nowrap">{data(r.data_reala || r.data_extras)}</td>
+                  <td class="nowrap">
+                    {data(r.data_reala || r.data_extras)}
+                    {r.data_reala && r.data_reala.slice(0, 7) !== r.data_extras.slice(0, 7) && <div class="mic gri" title="Plătită într-o lună, apărută în extrasul lunii următoare">în extras {data(r.data_extras)}</div>}
+                  </td>
                   <td class="nowrap mic ascuns-panou">{r.cont_cod}</td>
                   <td>
                     <div class="cp">{r.contrapartida || '—'}</div>
