@@ -5,7 +5,7 @@ import { bani, data, luna, suma, LUNI, STARI, IMPARTIRI, csv, descarca, citesteS
 import { Editor, mesajEroare, procentAfisat } from './editor.jsx';
 import { celalalt, INTREBARI_RAPIDE } from '../membri.js';
 
-const GOL = { luna: '', cont: '', stare: '', categorie: '', q: '', cp: '', sens: '', impartire: '' };
+const GOL = { luna: '', cont: '', stare: '', categorie: '', q: '', cp: '', sens: '', impartire: '', client: '' };
 const FILE = [['', 'Toate'], ['neclasificat', 'De clasificat'], ['propus', 'Propuse'], ['intrebare', 'Cu întrebări'], ['confirmat', 'Confirmate']];
 
 export function Tranzactii({ params }) {
@@ -34,6 +34,7 @@ export function Tranzactii({ params }) {
         if (f.sens === 'iesiri') x = x.lt('suma', 0);
         if (f.sens === 'intrari') x = x.gt('suma', 0);
         if (f.cp) x = x.eq('contrapartida', f.cp);
+        if (f.client) x = x.eq('client_id', f.client);
         if (f.q) {
           // Caracterele speciale pentru PostgREST și LIKE devin „_” (orice caracter).
           const t = f.q.trim().replace(/[,()\\*%"_:]/g, '_');
@@ -109,6 +110,7 @@ export function Tranzactii({ params }) {
           <input type="search" placeholder="Caută text sau sumă" title="ex. Wolt, 1.500,00 sau 160,59" value={text} onInput={(e) => setText(e.target.value)} />
         </form>
         {f.cp && <button class="mic activ" onClick={() => seteaza('cp', '')} title="Scoate filtrul">„{f.cp}” ✕</button>}
+        {f.client && <button class="mic activ" onClick={() => seteaza('client', '')} title="Scoate filtrul">Client: {nom.clienti.find((c) => String(c.id) === String(f.client))?.nume || f.client} ✕</button>}
         <button class="mic" onClick={() => { setText(''); mergi('tranzactii', {}); }}>Resetează</button>
         <button class="mic" onClick={exportCsv} disabled={!randuri?.length}>Export CSV</button>
       </div>
