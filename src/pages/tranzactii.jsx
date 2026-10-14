@@ -3,6 +3,7 @@ import { sb, q, toate } from '../supabase.js';
 import { Ctx, mergi } from '../app.jsx';
 import { bani, data, luna, suma, LUNI, STARI, IMPARTIRI, csv, descarca, citesteSuma, citesteProcent } from '../format.js';
 import { Editor, mesajEroare, procentAfisat } from './editor.jsx';
+import { celalalt, INTREBARI_RAPIDE } from '../membri.js';
 
 const GOL = { luna: '', cont: '', stare: '', categorie: '', q: '', cp: '', sens: '', impartire: '', client: '' };
 const FILE = [['', 'Toate'], ['neclasificat', 'De clasificat'], ['propus', 'Propuse'], ['intrebare', 'Cu întrebări'], ['confirmat', 'Confirmate']];
@@ -170,7 +171,9 @@ export function Tranzactii({ params }) {
 }
 
 function Bulk({ ids, gata, anuleaza }) {
-  const { nom } = useContext(Ctx);
+  const { nom, email } = useContext(Ctx);
+  const destinatar = celalalt(nom, email);
+  const [intrebare, setIntrebare] = useState('');
   const [v, setV] = useState({ categorie: '', impartire: '', procent_matei: '', stare: '' });
   const [mesaj, setMesaj] = useState('');
 
@@ -195,6 +198,16 @@ function Bulk({ ids, gata, anuleaza }) {
     } catch (e) { setMesaj(mesajEroare(e.message) + ' Nu s-a salvat nimic.'); }
   }
 
+  async function intreaba() {
+    if (!intrebare.trim()) { setMesaj('Scrie întrebarea.'); return; }
+    setMesaj('Se trimite…');
+    try {
+      const n = await q(sb.rpc('intreaba_linii', { p_ids: ids, p_titlu: intrebare.trim(), p_pentru: destinatar?.email || null }));
+      setIntrebare(''); setMesaj('');
+      gata(n);
+    } catch (e) { setMesaj(e.message + ' Nu s-a trimis nimic.'); }
+  }
+
   return (
     <div class="bulk">
       <b>{ids.length} selectate</b>
@@ -213,6 +226,12 @@ function Bulk({ ids, gata, anuleaza }) {
         {Object.entries(STARI).map(([k, t]) => <option value={k}>{t}</option>)}
       </select>
       <button class="primar" style={{ background: '#fff', color: 'var(--ink)' }} onClick={aplica}>Aplică</button>
+      <span class="intreaba">
+        <input list="intrebari-rapide" placeholder={`Întrebare pentru ${destinatar?.nume || 'celălalt'}…`} value={intrebare}
+          onInput={(e) => setIntrebare(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') intreaba(); }} />
+        <datalist id="intrebari-rapide">{INTREBARI_RAPIDE.map((x) => <option value={x} />)}</datalist>
+        <button onClick={intreaba} title="O întrebare pe fiecare linie selectată; clasificarea rămâne">? Întreabă</button>
+      </span>
       <button class="link" onClick={anuleaza}>Anulează selecția</button>
       {mesaj && <span class="mesaj">{mesaj}</span>}
     </div>
