@@ -16,13 +16,16 @@ export function Prezentare() {
 
   async function incarca() {
     try {
-      const [luni, intrebari, generale, probleme] = await Promise.all([
+      const eu = email.toLowerCase();
+      const [luni, intrebari, generale, probleme, pentruMine, raspunsuri] = await Promise.all([
         q(sb.from('v_rezumat_luna').select('*').order('luna')),
         q(sb.from('intrebari').select('id', { count: 'exact', head: true }).neq('stare', 'rezolvata')),
         q(sb.from('intrebari').select('id', { count: 'exact', head: true }).neq('stare', 'rezolvata').is('tranzactie_id', null).is('element_id', null)),
         q(sb.from('v_verificari').select('verificare,luna').in('verificare', VERIFICARI_BANI)),
+        q(sb.from('intrebari').select('id', { count: 'exact', head: true }).eq('stare', 'deschisa').or(`pentru.eq.${eu},pentru.is.null`)),
+        q(sb.from('intrebari').select('id', { count: 'exact', head: true }).eq('stare', 'raspunsa').eq('creat_de', eu)),
       ]);
-      setD({ luni, intrebari: intrebari.count, generale: generale.count, probleme });
+      setD({ luni, intrebari: intrebari.count, generale: generale.count, probleme, pentruMine: pentruMine.count, raspunsuri: raspunsuri.count });
     } catch (e) { setEroare(e.message); }
   }
   useEffect(() => { incarca(); }, []);
@@ -60,7 +63,9 @@ export function Prezentare() {
   const pasi = [
     [neclasificate, 'linii de clasificat', () => mergi('tranzactii', { stare: 'neclasificat' })],
     [propuse, 'propuneri de confirmat', () => mergi('tranzactii', { stare: 'propus' })],
-    [d.intrebari, d.generale ? `întrebări deschise (${d.generale} generale)` : 'întrebări deschise', () => mergi('intrebari')],
+    [d.pentruMine, 'întrebări la care trebuie să răspunzi tu', () => mergi('intrebari', { stare: 'mine' })],
+    ...(d.raspunsuri ? [[d.raspunsuri, 'răspunsuri primite la întrebările tale', () => mergi('intrebari', { stare: 'raspunsuri' })]] : []),
+    [d.intrebari, d.generale ? `întrebări deschise în total (${d.generale} generale)` : 'întrebări deschise în total', () => mergi('intrebari', { stare: 'deschisa' })],
     [d.probleme.length, 'probleme care schimbă suma', () => mergi('verificari')],
   ];
 
