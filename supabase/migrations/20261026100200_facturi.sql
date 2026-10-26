@@ -44,9 +44,11 @@ create policy membri_citesc on public.factura_plati for select to authenticated 
 create trigger jurnal_factura_plati after insert or update or delete on public.factura_plati
   for each row execute function public.scrie_jurnal('tranzactie_id');
 
--- Numărul de document fără spații și semne: „VIS 0007”, „AS-14-26/SOLO” → VIS0007, AS1426SOLO.
+-- Text fără diacritice, spații și semne: „VIS 0007”, „AS-14-26/SOLO”, „ŞFARŢ” → VIS0007, AS1426SOLO, SFART.
 create or replace function public.norm_doc(x text) returns text
-language sql immutable as $$ select upper(regexp_replace(coalesce(x, ''), '[^A-Za-z0-9]', '', 'g')) $$;
+language sql immutable as $$
+  select upper(regexp_replace(translate(coalesce(x, ''), 'ĂÂÎȘŞȚŢăâîșşțţ', 'AAISSTTaaisstt'), '[^A-Za-z0-9]', '', 'g'))
+$$;
 
 -- p = [{directie, numar, data, scadenta, emitent, emitent_cui, client, client_cui, moneda, net, tva, total, linii, fisier}]
 create or replace function public.importa_facturi(p jsonb)
@@ -73,11 +75,13 @@ begin
 end $function$;
 
 -- Propuneri: fiecare încasare de la client / plată la colaborator din aug 2026, cu factura ei.
--- 1) după numărul facturii scris în descrierea plății; 2) altfel după sumă, doar dacă o singură factură se potrivește.
+-- 1) după numărul facturii scris în descrierea plății;
+-- 2) altfel după sumă, doar când: factura nu e deja a altei plăți (după număr sau aplicată), numele partenerului
+--    apare în descrierea plății, e singura factură potrivită pentru plată și plata e singura pentru factură.
 create or replace view public.v_tva_propuneri with (security_invoker = on) as
 with linii as (
   select v.id, v.data_extras, v.luna, v.categorie, v.stare, v.suma_ron, v.tva_ron, v.descriere, v.contrapartida,
-         public.norm_doc(v.descriere) as nd,
+         public.norm_doc(coalesce(v.descriere, '') || ' ' || coalesce(v.contrapartida, '')) as nd,
          case when v.suma_ron > 0 then 'emisa' else 'primita' end as directie
   from public.v_tranzactii v
   where v.data_extras >= '2026-08-01' and v.titular = 'firma' and v.categorie in ('venit_client','colaborator')
@@ -87,12 +91,29 @@ with linii as (
   from linii l join public.facturi f on f.directie = l.directie
    and length(public.norm_doc(f.numar)) >= 4 and position(public.norm_doc(f.numar) in l.nd) > 0
   order by l.id, length(public.norm_doc(f.numar)) desc, abs(f.total - abs(l.suma_ron))
-), dupa_suma as (
-  select l.id, min(f.id) as factura_id, 'aceeași sumă, singura factură potrivită'::text as metoda
+), candidati as (
+  select l.id, f.id as factura_id
   from linii l join public.facturi f on f.directie = l.directie
    and abs(f.total - abs(l.suma_ron)) <= 0.01 and f.data between l.data_extras - 90 and l.data_extras + 3
   where not exists (select 1 from dupa_numar n where n.id = l.id)
-  group by l.id having count(*) = 1
+    and not exists (select 1 from dupa_numar n where n.factura_id = f.id)
+    and not exists (select 1 from public.factura_plati p where p.factura_id = f.id and p.tranzactie_id <> l.id)
+    -- factura e numită în descrierea altei linii din extrase (inclusiv plăți dinainte de august)
+    and not (length(public.norm_doc(f.numar)) >= 4 and exists (
+          select 1 from public.tranzactii t where t.id <> l.id and position(public.norm_doc(f.numar) in public.norm_doc(t.descriere)) > 0))
+    -- un cuvânt din numele partenerului (fără cele generice) apare în descrierea plății
+    and exists (
+          select 1 from regexp_split_to_table(case when f.directie = 'emisa' then f.client else f.emitent end, '[^[:alnum:]ĂÂÎȘŞȚŢăâîșşțţ]+') w
+          where length(public.norm_doc(w)) >= 4
+            and public.norm_doc(w) not in ('PERSOANA','FIZICA','AUTORIZATA','INTREPRINDERE','INDIVIDUALA','FAMILIALA','SOCIETATE',
+              'COMPANY','ROMANIA','IMPEX','GROUP','GRUP','STUDIO','STUDIOS','SERVICE','SERVICES','SOLUTIONS','CONSULTING','MEDIA',
+              'EVENTS','ENTERTAINMENT','INTERNATIONAL','DISTRIBUTION','BUCURESTI','LIMITED','MARKETING','PRODUCTION','DIGITAL')
+            and position(public.norm_doc(w) in l.nd) > 0)
+), dupa_suma as (
+  select c.id, c.factura_id, 'aceeași sumă și partener, singura factură potrivită'::text as metoda
+  from candidati c
+  where (select count(*) from candidati c2 where c2.id = c.id) = 1
+    and (select count(*) from candidati c3 where c3.factura_id = c.factura_id) = 1
 ), alese as (
   select * from dupa_numar union all select * from dupa_suma
 )
@@ -112,26 +133,31 @@ left join public.factura_plati fp on fp.tranzactie_id = l.id
 left join alese a on a.id = l.id
 left join public.facturi f on f.id = coalesce(fp.factura_id, a.factura_id);
 
--- Aplică TVA-ul din factură pe liniile alese. O linie confirmată al cărei TVA se schimbă în altceva decât 0
--- redevine „propus” (suma din calcul se schimbă, deci Alex o confirmă din nou).
+-- Aplică TVA-ul din factură pe liniile alese. O linie confirmată al cărei TVA efectiv (gol = 0) se schimbă
+-- redevine „propus”: suma din calcul se schimbă, deci se confirmă din nou. Gol → 0 rămâne confirmată.
 create or replace function public.aplica_tva(p_ids bigint[])
  returns integer language plpgsql security definer set search_path to 'public'
 as $function$
 declare n int;
 begin
   if not public.este_editor() then raise exception 'Acces interzis.'; end if;
-  create temp table _tva on commit drop as
-    select tranzactie_id, factura_id, tva_calculat, metoda, tva_actual from public.v_tva_propuneri
-     where tranzactie_id = any(p_ids) and factura_id is not null;
-  insert into public.factura_plati (tranzactie_id, factura_id, tva_ron, metoda)
-  select tranzactie_id, factura_id, tva_calculat, metoda from _tva
-  on conflict (tranzactie_id) do update set factura_id = excluded.factura_id, tva_ron = excluded.tva_ron,
-    metoda = excluded.metoda, aplicat_la = now(), aplicat_de = nullif(public.email_curent(), '');
-  update public.clasificari c set
-    tva_ron = x.tva_calculat,
-    stare = case when c.stare = 'confirmat' and x.tva_calculat <> 0 and x.tva_actual is distinct from x.tva_calculat then 'propus' else c.stare end
-  from _tva x where c.tranzactie_id = x.tranzactie_id and c.tva_ron is distinct from x.tva_calculat;
-  get diagnostics n = row_count;
+  with x as (
+    select tranzactie_id, factura_id, tva_calculat, metoda from public.v_tva_propuneri
+     where tranzactie_id = any(p_ids) and factura_id is not null
+  ), legate as (
+    insert into public.factura_plati (tranzactie_id, factura_id, tva_ron, metoda)
+    select tranzactie_id, factura_id, tva_calculat, metoda from x
+    on conflict (tranzactie_id) do update set factura_id = excluded.factura_id, tva_ron = excluded.tva_ron,
+      metoda = excluded.metoda, aplicat_la = now(), aplicat_de = nullif(public.email_curent(), '')
+    returning 1
+  ), schimbate as (
+    update public.clasificari c set
+      tva_ron = x.tva_calculat,
+      stare = case when c.stare = 'confirmat' and coalesce(c.tva_ron, 0) <> x.tva_calculat then 'propus' else c.stare end
+    from x where c.tranzactie_id = x.tranzactie_id and c.tva_ron is distinct from x.tva_calculat
+    returning 1
+  )
+  select count(*) into n from schimbate;
   return n;
 end $function$;
 

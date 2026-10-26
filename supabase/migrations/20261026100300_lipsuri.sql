@@ -19,25 +19,28 @@ select 1 as ordine, 'Extrase lipsă'::text as zona,
 from acoperire a where a.pana is null or a.pana < (a.luna + interval '1 month - 1 day')::date
 union all
 select 2, 'Linii neclasificate', coalesce(cat.eticheta, 'fără categorie'), null, count(*)::int, sum(s.valoare),
-       'tranzactii', 'stare=neclasificat' || coalesce('&categorie=' || s.categorie, '')
+       'tranzactii', 'stare=neclasificat&categorie=' || coalesce(s.categorie, '-')
 from suma s left join public.categorii cat on cat.cod = s.categorie
 where s.stare = 'neclasificat' group by cat.eticheta, s.categorie
 union all
+select 3, 'Linii cu întrebări', coalesce(cat.eticheta, 'fără categorie'), null, count(*)::int, sum(s.valoare),
+       'tranzactii', 'stare=intrebare&categorie=' || coalesce(s.categorie, '-')
+from suma s left join public.categorii cat on cat.cod = s.categorie
+where s.stare = 'intrebare' group by cat.eticheta, s.categorie
+union all
+-- Întrebările deschise (și cele pe linii deja confirmate sau propuse): se rezolvă din pagina Întrebări.
 select 3, 'Întrebări deschise',
-       'pentru ' || coalesce(m.nume, i.pentru, 'oricine') || ': ' || coalesce(cat.eticheta, case when i.tranzactie_id is null then 'întrebări generale' else 'fără categorie' end),
-       null, count(*)::int, sum(s.valoare),
-       case when i.tranzactie_id is null then 'intrebari' else 'tranzactii' end,
-       case when i.tranzactie_id is null then 'stare=deschisa' else 'stare=intrebare' || coalesce('&categorie=' || s.categorie, '') end
-from (select distinct on (coalesce(tranzactie_id, -id)) id, tranzactie_id, pentru
+       'pentru ' || coalesce(m.nume, i.pentru, 'oricine') || case when i.stare = 'raspunsa' then ': au răspuns, de închis' else ': așteaptă răspuns' end,
+       null, count(*)::int, sum(s.valoare), 'intrebari', 'stare=' || i.stare
+from (select distinct on (coalesce(tranzactie_id, -id)) id, tranzactie_id, pentru, stare
       from public.intrebari where stare <> 'rezolvata' and element_id is null
       order by coalesce(tranzactie_id, -id), creat_la) i
 left join suma s on s.id = i.tranzactie_id
-left join public.categorii cat on cat.cod = s.categorie
 left join public.membri m on lower(m.email) = lower(i.pentru)
-group by m.nume, i.pentru, cat.eticheta, s.categorie, (i.tranzactie_id is null)
+group by m.nume, i.pentru, i.stare
 union all
 select 4, 'De confirmat (propuse)', coalesce(cat.eticheta, 'fără categorie'), null, count(*)::int, sum(s.valoare),
-       'tranzactii', 'stare=propus' || coalesce('&categorie=' || s.categorie, '')
+       'tranzactii', 'stare=propus&categorie=' || coalesce(s.categorie, '-')
 from suma s left join public.categorii cat on cat.cod = s.categorie
 where s.stare = 'propus' group by cat.eticheta, s.categorie
 union all
@@ -53,7 +56,8 @@ union all
 select 6, 'Rambursări neconfirmate', coalesce(r.nota, 'rambursare #' || r.id), r.luna, null, abs(r.suma_ron), 'manual', null
 from public.rambursari r where r.stare <> 'confirmat'
 union all
-select 7, 'Costuri recurente neconfirmate', r.nume, r.prima_luna, null, r.suma, 'nomenclatoare', null
+select 7, 'Costuri recurente neconfirmate', r.nume || coalesce(' (' || to_char(r.suma, 'FM999G999G990D00') || ' ' || r.moneda || ')', ''),
+       r.prima_luna, null, null::numeric, 'nomenclatoare', null
 from public.costuri_recurente r where not r.confirmat
 union all
 select 8, 'Luni neînchise',

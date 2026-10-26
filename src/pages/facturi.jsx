@@ -119,7 +119,8 @@ function Propuneri() {
     try {
       const l = await toate(() => sb.from('v_tva_propuneri').select('*').order('data_extras').order('tranzactie_id'));
       setLista(l);
-      setSel(new Set(l.filter((x) => x.situatie === 'nou').map((x) => x.tranzactie_id)));
+      // Bifate din start doar potrivirile după numărul facturii; cele după sumă le bifezi tu după ce le verifici.
+      setSel(new Set(l.filter((x) => x.situatie === 'nou' && x.metoda?.startsWith('numărul')).map((x) => x.tranzactie_id)));
       const platite = new Set(l.map((x) => x.factura_id).filter(Boolean));
       const emise = await toate(() => sb.from('facturi').select('id,numar,data,client,total,tva').eq('directie', 'emisa').gte('data', '2026-08-01').order('data'));
       setNeplatite(emise.filter((f) => !platite.has(f.id)));
