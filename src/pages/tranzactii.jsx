@@ -171,7 +171,7 @@ export function Tranzactii({ params }) {
 }
 
 function Bulk({ ids, gata, anuleaza }) {
-  const { nom, email } = useContext(Ctx);
+  const { nom, email, editor } = useContext(Ctx);
   const destinatar = celalalt(nom, email);
   const [intrebare, setIntrebare] = useState('');
   const [v, setV] = useState({ categorie: '', impartire: '', procent_matei: '', stare: '' });
@@ -211,6 +211,7 @@ function Bulk({ ids, gata, anuleaza }) {
   return (
     <div class="bulk">
       <b>{ids.length} selectate</b>
+      {editor && <>
       <select value={v.categorie} onChange={(e) => setV({ ...v, categorie: e.target.value })}>
         <option value="">Categorie…</option>
         <option value="-">(fără categorie)</option>
@@ -226,6 +227,7 @@ function Bulk({ ids, gata, anuleaza }) {
         {Object.entries(STARI).map(([k, t]) => <option value={k}>{t}</option>)}
       </select>
       <button class="primar" style={{ background: '#fff', color: 'var(--ink)' }} onClick={aplica}>Aplică</button>
+      </>}
       <span class="intreaba">
         <input list="intrebari-rapide" placeholder={`Întrebare pentru ${destinatar?.nume || 'celălalt'}…`} value={intrebare}
           onInput={(e) => setIntrebare(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') intreaba(); }} />

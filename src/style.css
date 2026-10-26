@@ -144,6 +144,7 @@ details.cum p, details.cum li { color: var(--ink-2); max-width: 860px; }
 /* ---------- Panoul unei linii ---------- */
 .cu-panou { margin-right: 480px; }
 .panou { position: fixed; right: 0; top: var(--sus); bottom: 0; width: 470px; background: var(--card); border-left: 1px solid var(--linie); padding: 14px 20px 48px; overflow-y: auto; z-index: 6; box-shadow: -8px 0 24px rgba(0,0,0,.05); }
+fieldset.citire { border: 0; padding: 0; margin: 0; min-width: 0; }
 .panou-sus { display: flex; gap: 6px; align-items: center; }
 .panou-sus span { flex: 1; }
 .suma-mare { font: 400 40px/1.1 var(--serif); margin-top: 10px; font-variant-numeric: tabular-nums; }

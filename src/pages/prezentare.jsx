@@ -8,7 +8,7 @@ export const VERIFICARI_BANI = ['lipsa_curs', 'semn_gresit', 'transfer_nu_se_anu
   'rambursare_fara_ron', 'rambursare_legata', 'tva_lipsa', 'ron_diferit_de_curs'];
 
 export function Prezentare() {
-  const { email } = useContext(Ctx);
+  const { email, editor } = useContext(Ctx);
   const [d, setD] = useState(null);
   const [eroare, setEroare] = useState('');
   const [mesaj, setMesaj] = useState('');
@@ -70,6 +70,8 @@ export function Prezentare() {
     [d.probleme.length, 'probleme care schimbă suma', () => mergi('verificari')],
     [d.proiecteFara, 'proiecte fără partea lui Matei', () => mergi('nomenclatoare')],
   ];
+  // Verificările și proiectele sunt pagini de lucru; Matei nu le are în meniu.
+  if (!editor) pasi.splice(-2, 2);
 
   return (
     <div>
@@ -129,7 +131,7 @@ export function Prezentare() {
                     {problemePeLuna[l.luna] > 0 && <div class="mic atentie">{problemePeLuna[l.luna]} probleme de verificat</div>}
                   </td>
                   <td class="n">
-                    {l.status === 'inchisa'
+                    {!editor ? null : l.status === 'inchisa'
                       ? <button class="mic" onClick={() => redeschide(l.luna)}>Redeschide</button>
                       : <button class="mic" disabled={amConfirmat} title={amConfirmat ? 'Ai confirmat deja luna. Orice modificare anulează confirmarea.' : ''}
                           onClick={() => confirma(l.luna)}>{amConfirmat ? 'Confirmată de tine' : 'Confirmă luna'}</button>}
