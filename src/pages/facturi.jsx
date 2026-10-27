@@ -4,14 +4,15 @@ import { mergi } from '../app.jsx';
 import { bani, data, suma } from '../format.js';
 import { parseazaFactura } from '../efactura.js';
 
-// Din august 2026 calculul e fără TVA. Facturile din SPV dau TVA-ul fiecărei încasări și plăți către colaboratori.
+// Din august 2026 calculul e fără TVA. Facturile din SPV dau TVA-ul fiecărei încasări, plăți către colaboratori și costuri.
 export function Facturi() {
   return (
     <div>
       <h1 class="titlu">Facturi și TVA</h1>
       <p class="intro">
         Încarci arhivele e-Factura din SPV (emise și primite), aplicația citește facturile și propune TVA-ul pentru fiecare
-        încasare de la clienți și fiecare plată către colaboratori din august 2026. TVA-ul unei plăți parțiale e proporțional cu suma plătită.
+        încasare de la clienți, plată către colaboratori și cost plătit de firmă din august 2026. TVA-ul unei plăți parțiale e proporțional cu suma plătită.
+        FA Studios e plătitor de TVA din 20.08.2026: TVA-ul de pe facturile furnizorilor de dinainte rămâne în cost (în calcul 0).
         Propunerile se aplică doar când apeși tu „Aplică”.
       </p>
       <Incarca />
@@ -113,17 +114,24 @@ function Propuneri() {
   const [mesaj, setMesaj] = useState('');
   const [eroare, setEroare] = useState('');
   const [neplatite, setNeplatite] = useState([]);
+  const [primiteFaraPlata, setPrimiteFaraPlata] = useState([]);
 
   async function incarca() {
     setEroare('');
     try {
       const l = await toate(() => sb.from('v_tva_propuneri').select('*').order('data_extras').order('tranzactie_id'));
       setLista(l);
-      // Bifate din start doar potrivirile după numărul facturii; cele după sumă le bifezi tu după ce le verifici.
-      setSel(new Set(l.filter((x) => x.situatie === 'nou' && x.metoda?.startsWith('numărul')).map((x) => x.tranzactie_id)));
+      // Bifate din start doar încasările și colaboratorii găsiți după numărul facturii; restul le bifezi tu după ce le verifici.
+      setSel(new Set(l.filter((x) => x.situatie === 'nou' && x.tip !== 'cost' && !x.inchisa && x.metoda?.startsWith('numărul')).map((x) => x.tranzactie_id)));
       const platite = new Set(l.map((x) => x.factura_id).filter(Boolean));
       const emise = await toate(() => sb.from('facturi').select('id,numar,data,client,total,tva').eq('directie', 'emisa').gte('data', '2026-08-01').order('data'));
       setNeplatite(emise.filter((f) => !platite.has(f.id)));
+      // Vederea veche (înainte de migrarea 20261027100000) nu are costurile: lista ar arăta facturi plătite ca neplătite.
+      const cuCosturi = l.length === 0 || 'tip' in l[0];
+      const primite = cuCosturi
+        ? await toate(() => sb.from('facturi').select('id,numar,data,emitent,total,tva').eq('directie', 'primita').gte('data', '2026-08-20').order('data'))
+        : [];
+      setPrimiteFaraPlata(primite.filter((f) => !platite.has(f.id) && Number(f.total) > 0));
     } catch (e) { setEroare(lipsaMigrare(e.message)); }
   }
   useEffect(() => {
@@ -133,18 +141,20 @@ function Propuneri() {
   }, []);
 
   async function aplica() {
-    const ids = [...sel].filter((id) => vizibile.some((x) => x.tranzactie_id === id));
+    const ids = [...sel].filter((id) => vizibile.some((x) => x.tranzactie_id === id && !x.inchisa));
     if (!ids.length) { setMesaj('Bifează cel puțin o linie.'); return; }
     setMesaj('Se aplică…');
     try {
       const n = await q(sb.rpc('aplica_tva', { p_ids: ids }));
-      setMesaj(`✓ TVA aplicat pe ${n} linii. Liniile confirmate al căror TVA s-a schimbat au redevenit „Propus” și trebuie confirmate din nou.`);
+      const cuCosturi = lista.length === 0 || 'tip' in lista[0];
+      setMesaj(`✓ TVA aplicat pe ${n} linii. Liniile confirmate al căror TVA s-a schimbat au redevenit „Propus” și trebuie confirmate din nou`
+        + (cuCosturi ? ' (cele 100% Alex sau excluse rămân confirmate).' : '.'));
       incarca();
     } catch (e) { setMesaj('❌ ' + lipsaMigrare(e.message)); }
   }
 
-  if (eroare) return <section class="card"><h3>2. TVA pe încasări și plăți</h3><p class="eroare">{eroare}</p></section>;
-  if (!lista) return <section class="card"><h3>2. TVA pe încasări și plăți</h3><p class="gri">Se încarcă…</p></section>;
+  if (eroare) return <section class="card"><h3>2. TVA pe încasări, colaboratori și costuri</h3><p class="eroare">{eroare}</p></section>;
+  if (!lista) return <section class="card"><h3>2. TVA pe încasări, colaboratori și costuri</h3><p class="gri">Se încarcă…</p></section>;
 
   const inFila = {
     de_aplicat: (x) => x.situatie === 'nou',
@@ -155,25 +165,26 @@ function Propuneri() {
   const vizibile = lista.filter(inFila[fila]);
   const bifabil = fila === 'de_aplicat' || fila === 'diferit';
   const comuta = (id) => { const s = new Set(sel); s.has(id) ? s.delete(id) : s.add(id); setSel(s); };
-  const toateBifate = vizibile.length > 0 && vizibile.every((x) => sel.has(x.tranzactie_id));
+  const deschise = vizibile.filter((x) => !x.inchisa);
+  const toateBifate = deschise.length > 0 && deschise.every((x) => sel.has(x.tranzactie_id));
   const bifeaza = () => {
     const s = new Set(sel);
-    for (const x of vizibile) toateBifate ? s.delete(x.tranzactie_id) : s.add(x.tranzactie_id);
+    for (const x of deschise) toateBifate ? s.delete(x.tranzactie_id) : s.add(x.tranzactie_id);
     setSel(s);
   };
-  const alese = vizibile.filter((x) => sel.has(x.tranzactie_id));
+  const alese = deschise.filter((x) => sel.has(x.tranzactie_id));
 
   return (
     <>
       <section class="card" style={{ marginTop: '18px' }}>
-        <h3>2. TVA pe încasări și plăți către colaboratori (din aug 2026)</h3>
+        <h3>2. TVA pe încasări, colaboratori și costuri (din aug 2026)</h3>
         <div class="file">
           {FILE.map(([k, t]) => (
             <button class={`mic ${fila === k ? 'activ' : ''}`} onClick={() => setFila(k)}>{t} <span class="gri">{lista.filter(inFila[k]).length}</span></button>
           ))}
         </div>
         {fila === 'diferit' && <p class="mic gri">Linii care au deja un TVA completat, altul decât cel din factură. Bifează doar ce vrei să înlocuiești.</p>}
-        {fila === 'fara_factura' && <p class="mic gri">Nicio factură încărcată nu are numărul din descrierea plății sau exact aceeași sumă. Încarcă arhiva lunii sau completează TVA-ul în panoul liniei.</p>}
+        {fila === 'fara_factura' && <p class="mic gri">Încasări și plăți către colaboratori pentru care nicio factură încărcată nu are numărul din descrierea plății sau exact aceeași sumă. Încarcă arhiva lunii sau completează TVA-ul în panoul liniei. Drepturile de autor (fără TVA) apar la „De aplicat”, cu TVA 0. Costurile apar doar după ce au o factură (plățile fără factură nu au TVA de dedus).</p>}
         {vizibile.length === 0 ? <p class="gri">Nimic aici.</p> : (
           <div class="tabel-lat">
             <table class="tabel">
@@ -184,16 +195,20 @@ function Propuneri() {
               </tr></thead>
               <tbody>{vizibile.map((x) => (
                 <tr>
-                  {bifabil && <td><input type="checkbox" checked={sel.has(x.tranzactie_id)} onChange={() => comuta(x.tranzactie_id)} /></td>}
+                  {bifabil && <td><input type="checkbox" checked={sel.has(x.tranzactie_id) && !x.inchisa} disabled={x.inchisa}
+                    title={x.inchisa ? 'Luna e închisă' : undefined} onChange={() => comuta(x.tranzactie_id)} /></td>}
                   <td class="nowrap">{data(x.data_extras)}</td>
                   <td class="mic"><a href="#" onClick={(e) => { e.preventDefault(); mergi('tranzactii', { id: x.tranzactie_id }); }}>#{x.tranzactie_id}</a>{' '}
-                    {x.categorie === 'colaborator' ? 'colaborator' : 'încasare'} · {x.contrapartida || x.descriere?.slice(0, 60)}</td>
+                    {{ incasare: 'încasare', colaborator: 'colaborator', cost: 'cost' }[x.tip] || (x.categorie === 'colaborator' ? 'colaborator' : 'încasare')}
+                    {' · '}{x.contrapartida || x.descriere?.slice(0, 60)}</td>
                   <td class="n nowrap">{bani(x.suma_ron)}</td>
                   <td class="mic">{x.numar ? <>{x.numar} · {data(x.data_factura)}<br /><span class="gri">{x.partener}</span></> : '—'}</td>
                   <td class="n">{bani(x.total)}</td><td class="n">{bani(x.tva_factura)}</td>
                   <td class="n"><b>{bani(x.tva_calculat)}</b></td>
                   <td class="n gri">{x.tva_actual === null ? '—' : bani(x.tva_actual)}</td>
-                  <td class="mic gri">{x.metoda || ''}</td>
+                  <td class="mic gri">{x.metoda || ''}
+                    {x.tva_nedeductibil && <><br />factură dinainte de 20.08.2026: TVA-ul rămâne în cost</>}
+                    {x.inchisa && <><br />luna e închisă</>}</td>
                 </tr>
               ))}</tbody>
             </table>
@@ -215,6 +230,21 @@ function Propuneri() {
           <table class="tabel">
             <thead><tr><th>Factura</th><th>Data</th><th>Client</th><th class="n">Total</th><th class="n">TVA</th></tr></thead>
             <tbody>{neplatite.map((f) => <tr><td>{f.numar}</td><td>{data(f.data)}</td><td>{f.client}</td><td class="n">{bani(f.total)}</td><td class="n">{bani(f.tva)}</td></tr>)}</tbody>
+          </table>
+        </section>
+      )}
+
+      {primiteFaraPlata.length > 0 && (
+        <section class="card" style={{ marginTop: '18px' }}>
+          <h3>Facturi primite din 20.08.2026 fără plată găsită</h3>
+          <p class="mic gri">
+            Pot fi plătite după ultimul extras importat, din alt cont sau card (atunci TVA-ul lor nu e în calcul), de o linie trecută la
+            cheltuieli personale, credit, taxe sau transferuri (acestea nu intră la TVA) ori sunt doar o parte dintr-o plată mai mare
+            (ex. taxa de livrare Wolt). Stornările (sume negative) nu apar aici.
+          </p>
+          <table class="tabel">
+            <thead><tr><th>Factura</th><th>Data</th><th>Furnizor</th><th class="n">Total</th><th class="n">TVA</th></tr></thead>
+            <tbody>{primiteFaraPlata.map((f) => <tr><td>{f.numar}</td><td>{data(f.data)}</td><td>{f.emitent}</td><td class="n">{bani(f.total)}</td><td class="n">{bani(f.tva)}</td></tr>)}</tbody>
           </table>
         </section>
       )}
