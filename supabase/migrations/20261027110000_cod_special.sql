@@ -57,12 +57,10 @@ begin
           (case when c.procent is null then null else 'procent' end, c.procent, case when c.procent is null then 'neclasificat' else 'propus' end)
     returning (c.procent is not null) as ok
   )
-  select count(*) filter (where ok), count(*) filter (where not ok) into v_act, v_ast from u;
-  -- plăți deja confirmate al căror procent nu mai corespunde achizițiilor: nu se ating, doar se numără
-  select count(*) into v_dif
-  from plati p join pe_luna l on l.luna = p.luna
-  where p.stare = 'confirmat' and l.fara_impartire = 0 and l.baza > 0
-    and coalesce(p.procent_precis, -1) <> round(100 * l.baza_matei / l.baza, 6);
+  -- plățile deja confirmate al căror procent nu mai corespunde achizițiilor nu se ating, doar se numără
+  select (select count(*) from u where ok), (select count(*) from u where not ok),
+         (select count(*) from calcul c where c.stare = 'confirmat' and c.procent is not null and coalesce(c.procent_precis, -1) <> c.procent)
+    into v_act, v_ast, v_dif;
   return query select v_act, v_ast, v_dif;
 end $function$;
 revoke execute on function public.sincronizeaza_cod_special() from anon, public;
