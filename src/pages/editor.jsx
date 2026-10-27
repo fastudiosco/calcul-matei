@@ -26,7 +26,7 @@ export function procentAfisat(r) {
 const egal = (a, b) => (a ?? null) === (b ?? null) || (a !== null && b !== null && a !== undefined && b !== undefined && Number(a) === Number(b) && !isNaN(Number(a)));
 
 export function Editor({ id, inchide, salvat, urmator, anterior, filtreaza }) {
-  const { nom, email } = useContext(Ctx);
+  const { nom, email, editor } = useContext(Ctx);
   const [t, setT] = useState(null);
   const [v, setV] = useState(null);
   const [ronManual, setRonManual] = useState(false);
@@ -150,7 +150,8 @@ export function Editor({ id, inchide, salvat, urmator, anterior, filtreaza }) {
     upd.stare = 'intrebare';
     try {
       // Întâi linia: dacă luna e închisă, se oprește aici și nu rămâne o întrebare agățată.
-      await q(sb.from('clasificari').update(upd).eq('tranzactie_id', id));
+      // Matei (cititor) nu schimbă clasificarea: întrebarea lui mută singură linia în „Cu întrebări”.
+      if (editor) await q(sb.from('clasificari').update(upd).eq('tranzactie_id', id));
       await q(sb.from('intrebari').insert({ tranzactie_id: id, titlu: nouaIntrebare.trim(), pentru: destinatar?.email || null }));
       setNouaIntrebare('');
       salvat(); incarca();
@@ -196,6 +197,7 @@ export function Editor({ id, inchide, salvat, urmator, anterior, filtreaza }) {
       )}
       {t.contrapartida && <button class="link mic" onClick={() => filtreaza(t.contrapartida)}>Toate liniile cu „{t.contrapartida}”</button>}
 
+      <fieldset class="citire" disabled={!editor}>
       <div class="bloc">
         <h4>Ce este</h4>
         <div class="grila">
@@ -292,17 +294,21 @@ export function Editor({ id, inchide, salvat, urmator, anterior, filtreaza }) {
         <label class="lat">Dovadă / notă
           <textarea rows="3" value={v.nota} onInput={(e) => set('nota', e.target.value)} placeholder="De unde știm: mesaj WhatsApp, factură, confirmare de la Matei…" />
         </label>
-        <div class="actiuni">
-          <button onClick={() => salveaza(null)}>Salvează</button>
-          <button onClick={() => salveaza('propus', true)} title="Robert propune, Alex confirmă">Propune →</button>
-          <button class="primar" onClick={() => salveaza('confirmat', true)}>Confirmă →</button>
-        </div>
+        {editor && (
+          <div class="actiuni">
+            <button onClick={() => salveaza(null)}>Salvează</button>
+            <button onClick={() => salveaza('propus', true)} title="Robert propune, Alex confirmă">Propune →</button>
+            <button class="primar" onClick={() => salveaza('confirmat', true)}>Confirmă →</button>
+          </div>
+        )}
         {t.confirmat_de && <div class="gri mic">Confirmat de {t.confirmat_de}, {dataOra(t.confirmat_la)}</div>}
+        {!editor && <p class="gri mic">Poți doar citi linia. Dacă nu ești de acord cu ceva, scrie mai jos: întrebarea ajunge la {destinatar?.nume || 'Alex'}.</p>}
         {mesaj && <p class="eroare">{mesaj}</p>}
       </div>
+      </fieldset>
 
       <div class={`bloc intrebari-linie ${deschise.length ? 'are' : ''}`}>
-        <h4>Nu ești sigur? Întreabă-l pe {destinatar?.nume || 'celălalt membru'}</h4>
+        <h4>{editor ? 'Nu ești sigur? Întreabă-l' : 'Ai o întrebare sau nu ești de acord? Scrie-i lui'} {destinatar?.nume || 'celălalt membru'}</h4>
         {intrebari.map((i) => (
           <IntrebareLinie i={i} nom={nom} email={email} raspunde={raspunde} rezolva={rezolva} />
         ))}
@@ -315,10 +321,10 @@ export function Editor({ id, inchide, salvat, urmator, anterior, filtreaza }) {
           value={nouaIntrebare} onInput={(e) => setNouaIntrebare(e.target.value)} />
         <div class="actiuni">
           <button class="semnal" onClick={adaugaIntrebare} title="Salvează ce ai completat mai sus și lasă întrebarea">
-            ? Salvează și întreabă-l pe {destinatar?.nume || 'celălalt'}
+            ? {editor ? 'Salvează și întreabă-l pe' : 'Trimite-i lui'} {destinatar?.nume || 'celălalt'}
           </button>
         </div>
-        <p class="gri mic">Poți completa doar ce știi (ex. categoria) și lăsa restul. Când întrebarea e rezolvată, linia revine la „Propus”.</p>
+        {editor && <p class="gri mic">Poți completa doar ce știi (ex. categoria) și lăsa restul. Când întrebarea e rezolvată, linia revine la „Propus”.</p>}
       </div>
 
       <div class="bloc">

@@ -27,7 +27,7 @@ export function Login() {
       <form onSubmit={intra}>
         <img src={logo} alt="FA Studios" />
         <h1>Calcul Matei</h1>
-        <p class="gri mic" style={{ margin: 0 }}>Doar pentru Alex și Robert.</p>
+        <p class="gri mic" style={{ margin: 0 }}>Doar pentru Alex, Robert și Matei.</p>
         <label>Email<input type="email" value={email} onInput={(e) => setEmail(e.target.value)} required autocomplete="username" /></label>
         <label>Parolă<input type="password" value={parola} onInput={(e) => setParola(e.target.value)} required autocomplete="current-password" /></label>
         <button type="submit" disabled={lucru}>{lucru ? 'Se verifică…' : 'Intră'}</button>

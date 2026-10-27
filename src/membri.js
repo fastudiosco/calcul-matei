@@ -1,7 +1,16 @@
-// Cei doi membri: cine e celălalt (căruia îi adresezi întrebarea) și cum îi afișăm numele.
+// Membrii: Alex (admin) și Robert (editor) lucrează în calcul; Matei (cititor) vede tot și pune întrebări.
+export function rolMembru(nom, email) {
+  const m = nom.membri.find((x) => x.email.toLowerCase() === (email || '').toLowerCase());
+  return m ? m.rol : null;
+}
+
+export const poateEdita = (rol) => rol === 'admin' || rol === 'editor';
+
+// Cui îi adresezi întrebarea: editorul celălalt; cititorul (Matei) îl întreabă pe admin (Alex).
 export function celalalt(nom, email) {
   const eu = (email || '').toLowerCase();
-  return nom.membri.find((m) => m.email.toLowerCase() !== eu) || null;
+  if (!poateEdita(rolMembru(nom, email))) return nom.membri.find((m) => m.rol === 'admin') || null;
+  return nom.membri.find((m) => m.email.toLowerCase() !== eu && poateEdita(m.rol)) || null;
 }
 
 export function numeMembru(nom, email) {

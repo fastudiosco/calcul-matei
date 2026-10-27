@@ -11,22 +11,31 @@ import { Verificari } from './pages/verificari.jsx';
 import { Raport } from './pages/raport.jsx';
 import { Jurnal } from './pages/jurnal.jsx';
 import { Import } from './pages/import.jsx';
+import { Lipsuri } from './pages/lipsuri.jsx';
+import { Facturi } from './pages/facturi.jsx';
+import { rolMembru, poateEdita } from './membri.js';
 import logoAlb from './assets/fastudios-light.svg';
 
 export const Ctx = createContext(null);
 
-// [cheie, titlu, pagină, principală]: cele principale sunt munca de zi cu zi, restul sunt unelte.
+// [cheie, titlu, pagină, principală, și pentru cititor]: cele principale sunt munca de zi cu zi, restul sunt unelte.
+// Cititorul (Matei) vede rezumatul, tranzacțiile, întrebările, raportul, ce lipsește și istoricul.
 const PAGINI = [
-  ['prezentare', 'Rezumat', Prezentare, true],
-  ['tranzactii', 'Tranzacții', Tranzactii, true],
-  ['intrebari', 'Întrebări', Intrebari, true],
-  ['raport', 'Raport pentru Matei', Raport, true],
+  ['prezentare', 'Rezumat', Prezentare, true, true],
+  ['tranzactii', 'Tranzacții', Tranzactii, true, true],
+  ['intrebari', 'Întrebări', Intrebari, true, true],
+  ['lipsuri', 'Ce lipsește', Lipsuri, true, true],
+  ['raport', 'Raport pentru Matei', Raport, true, true],
   ['manual', 'Sume manuale', Manual],
   ['nomenclatoare', 'Proiecte și costuri', Nomenclatoare],
   ['verificari', 'Verificări', Verificari],
-  ['jurnal', 'Istoric', Jurnal],
+  ['facturi', 'Facturi și TVA', Facturi],
+  ['jurnal', 'Istoric', Jurnal, false, true],
   ['import', 'Import', Import],
 ];
+
+// Linkul de invitație Supabase aduce în adresă „type=invite”: contul nou își alege parola.
+const INVITATIE = /type=(invite|recovery)/.test(location.hash);
 
 // Rută din hash: #/tranzactii?luna=2026-03-01
 function citesteRuta() {
@@ -45,7 +54,7 @@ export function App() {
   const [ruta, setRuta] = useState(citesteRuta());
   const [nom, setNom] = useState(null);
   const [eroare, setEroare] = useState('');
-  const [recuperare, setRecuperare] = useState(false);
+  const [recuperare, setRecuperare] = useState(INVITATIE);
 
   useEffect(() => {
     sb.auth.getSession().then(({ data }) => setSesiune(data.session));
@@ -89,16 +98,19 @@ export function App() {
     );
   }
 
-  const Pagina = (PAGINI.find((p) => p[0] === ruta.pagina) || PAGINI[0])[2];
   const email = sesiune.user.email;
+  const rol = rolMembru(nom, email);
+  const editor = poateEdita(rol);
+  const vizibile = PAGINI.filter((p) => editor || p[4]);
+  const Pagina = (vizibile.find((p) => p[0] === ruta.pagina) || vizibile[0])[2];
   return (
-    <Ctx.Provider value={{ nom, reincarcaNom: incarcaNom, email }}>
+    <Ctx.Provider value={{ nom, reincarcaNom: incarcaNom, email, rol, editor }}>
       <header class="sus">
         <a class="marca" href="#/prezentare"><img src={logoAlb} alt="FA Studios" /><span>Calcul Matei</span></a>
         <nav>
-          {PAGINI.filter((p) => p[3]).map(([k, t]) => <a href={`#/${k}`} class={ruta.pagina === k ? 'activ' : ''}>{t}</a>)}
+          {vizibile.filter((p) => p[3]).map(([k, t]) => <a href={`#/${k}`} class={ruta.pagina === k ? 'activ' : ''}>{t}</a>)}
           <i class="sep" />
-          {PAGINI.filter((p) => !p[3]).map(([k, t]) => <a href={`#/${k}`} class={`secundar ${ruta.pagina === k ? 'activ' : ''}`}>{t}</a>)}
+          {vizibile.filter((p) => !p[3]).map(([k, t]) => <a href={`#/${k}`} class={`secundar ${ruta.pagina === k ? 'activ' : ''}`}>{t}</a>)}
         </nav>
         <span class="user"><span>{email}</span> <button class="mic" onClick={() => sb.auth.signOut()}>Ieșire</button></span>
       </header>
@@ -119,6 +131,7 @@ function ParolaNoua({ gata }) {
     <div class="login">
       <form onSubmit={salveaza}>
         <h1>Parolă nouă</h1>
+        <p class="gri mic" style={{ margin: 0 }}>Alege parola cu care vei intra de acum în Calcul Matei.</p>
         <label>Parola nouă<input type="password" minLength={10} required value={p} onInput={(e) => setP(e.target.value)} autocomplete="new-password" /></label>
         <button>Salvează</button>
         {mesaj && <p class="mesaj">{mesaj}</p>}
