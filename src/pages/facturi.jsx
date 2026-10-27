@@ -208,7 +208,6 @@ function Propuneri() {
                   <td class="n gri">{x.tva_actual === null ? '—' : bani(x.tva_actual)}</td>
                   <td class="mic gri">{x.metoda || ''}
                     {x.tva_nedeductibil && <><br />factură dinainte de 20.08.2026: TVA-ul rămâne în cost</>}
-                    {x.tva_auto_50 && <><br />mașină: se deduce 50% din TVA (art. 298)</>}
                     {x.inchisa && <><br />luna e închisă</>}</td>
                 </tr>
               ))}</tbody>

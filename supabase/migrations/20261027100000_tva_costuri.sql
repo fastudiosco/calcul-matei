@@ -2,16 +2,13 @@
 -- FA Studios e plătitor de TVA, cu TVA la încasare, din 20.08.2026 (registrul ANAF). TVA-ul unei facturi de la furnizor
 -- se deduce doar dacă factura e din 20.08.2026 încolo; înainte, TVA-ul face parte din cost, deci în calcul TVA = 0
 -- (data facturii e o aproximare: serviciile consumate înainte de înregistrare nu dau drept de deducere, art. 297 + pct. 83(11) din norme).
--- Mașina (leasing, combustibil): art. 298 limitează deducerea la 50% dacă mașina nu e folosită exclusiv pentru firmă.
+-- Regula lui Alex (27.10.2026): de când firma e plătitoare de TVA, tot TVA-ul e al lui Alex; Matei nu atinge TVA-ul.
+-- Deci din facturile de la 20.08.2026 se scoate TVA-ul întreg, oricât deduce firma (ex. doar 50% la mașină, art. 298).
 
 create or replace function public.data_inregistrare_tva() returns date
 language sql immutable as $$ select date '2026-08-20' $$;
 
--- Cât din TVA-ul pe mașină (leasing RCI, combustibil) se deduce. Se schimbă doar dacă contabila confirmă altceva în D300.
-create or replace function public.cota_deducere_tva_auto() returns numeric
-language sql immutable as $$ select 0.5 $$;
-
--- Coloanele noi (tip, impartire, tva_nedeductibil, tva_auto_50, inchisa) sunt la final, ca să rămână compatibil cu vederea veche.
+-- Coloanele noi (tip, impartire, tva_nedeductibil, inchisa) sunt la final, ca să rămână compatibil cu vederea veche.
 -- Costurile apar doar când au o factură găsită: plățile fără factură (software din afara țării, comisioane) nu au TVA de dedus.
 create or replace view public.v_tva_propuneri with (security_invoker = on) as
 with linii as (
@@ -89,21 +86,17 @@ select l.id as tranzactie_id, l.data_extras, l.luna, l.categorie, l.stare, l.con
             else 'diferit' end as situatie,
        l.tip, l.impartire,
        coalesce(f.directie = 'primita' and f.data < public.data_inregistrare_tva() and f.tva <> 0, false) as tva_nedeductibil,
-       coalesce(t.auto and f.tva <> 0 and f.data >= public.data_inregistrare_tva(), false) as tva_auto_50,
        l.inchisa
 from linii l
 left join public.factura_plati fp on fp.tranzactie_id = l.id
 left join alese a on a.id = l.id
 left join public.facturi f on f.id = coalesce(fp.factura_id, a.factura_id)
-cross join lateral (select l.categorie in ('masina_matei', 'combustibil') as auto,
-                           -- drepturile de autor plătite persoanelor fizice nu au TVA (nu au nici factură)
-                           f.id is null and l.tip = 'colaborator' and l.nd like '%DREPTURI%AUTOR%' as drepturi) z
+-- drepturile de autor plătite persoanelor fizice nu au TVA (nu au nici factură)
+cross join lateral (select f.id is null and l.tip = 'colaborator' and l.nd like '%DREPTURI%AUTOR%' as drepturi) z
 cross join lateral (select z.drepturi,
-                           z.auto,
                            case when f.id is null then case when z.drepturi then 0::numeric end
                                 when f.total = 0 then 0
                                 when f.directie = 'primita' and f.data < public.data_inregistrare_tva() then 0
-                                when z.auto then round(l.suma_ron * f.tva / f.total * public.cota_deducere_tva_auto(), 2)
                                 else round(l.suma_ron * f.tva / f.total, 2) end as tva_calculat) t
 where l.tip <> 'cost' or f.id is not null;
 
