@@ -5,7 +5,7 @@ import { bani, luna, suma } from '../format.js';
 
 // Verificările care schimbă suma: o lună nu se poate confirma cât timp are una dintre ele.
 export const VERIFICARI_BANI = ['lipsa_curs', 'semn_gresit', 'transfer_nu_se_anuleaza', 'manual_fara_ron',
-  'rambursare_fara_ron', 'rambursare_legata', 'tva_lipsa', 'ron_diferit_de_curs'];
+  'rambursare_fara_ron', 'rambursare_legata', 'tva_lipsa', 'ron_diferit_de_curs', 'credit_nesincronizat'];
 
 export function Prezentare() {
   const { email, editor } = useContext(Ctx);
@@ -160,7 +160,7 @@ export function Prezentare() {
         <ul>
           <li>Fiecare linie din extrase are o împărțire: 50/50, 100% Matei, 100% Alex, un procent sau „exclus”.</li>
           <li>O plată din banii firmei sau ai lui Alex adaugă partea lui Matei la ce datorează. O încasare scade partea lui Matei.</li>
-          <li>Din august 2026 se calculează fără TVA (TVA-ul trece prin firmă, nu e al nimănui).</li>
+          <li>Din 20.08.2026 firma e plătitoare de TVA, iar TVA-ul e al lui Alex: de atunci partea lui Matei se calculează pe sumele fără TVA.</li>
           <li>Se adaugă sumele manuale (de exemplu Beetle) și se scad banii dați înapoi de Matei.</li>
           <li>Intră în sumă doar ce a fost confirmat. O lună se închide când e confirmată de amândoi; orice modificare anulează confirmarea.</li>
         </ul>

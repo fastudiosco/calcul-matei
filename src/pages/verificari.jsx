@@ -15,8 +15,9 @@ const TITLURI = {
   manual_fara_ron: 'Elemente manuale fără sumă în RON',
   rambursare_fara_ron: 'Rambursări fără sumă în RON',
   rambursare_legata: 'Rambursări legate de o linie care nu e confirmată ca 100% Matei',
-  tva_lipsa: 'Încasări și plăți către colaboratori din aug 2026 fără TVA completat',
+  tva_lipsa: 'Încasări, plăți către colaboratori și facturi FA plătite de Librio / TH Media din aug 2026 fără TVA completat',
   ron_diferit_de_curs: 'Suma în RON nu se potrivește cu cursul',
+  credit_nesincronizat: 'Credite: partea lui Matei din capitalul rămas nu corespunde ratelor din extrase',
 };
 // Doar acestea opresc închiderea unei luni: schimbă suma. Restul sunt semnale pentru verificat.
 const BLOCHEAZA = new Set(VERIFICARI_BANI);

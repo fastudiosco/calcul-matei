@@ -8,7 +8,7 @@ export const sb = createClient(SUPABASE_URL, SUPABASE_KEY, {
 // Aruncă eroarea Supabase ca excepție, cu mesajul din baza de date (care e în română).
 export async function q(promise) {
   const { data, error, count } = await promise;
-  if (error) throw new Error(error.message || String(error));
+  if (error) throw Object.assign(new Error(error.message || String(error)), { code: error.code });
   return count !== undefined && count !== null ? { data, count } : data;
 }
 
@@ -17,7 +17,7 @@ export async function toate(build, pas = 1000) {
   const rez = [];
   for (let de = 0; ; de += pas) {
     const { data, error } = await build().range(de, de + pas - 1);
-    if (error) throw new Error(error.message);
+    if (error) throw Object.assign(new Error(error.message), { code: error.code });
     rez.push(...data);
     if (data.length < pas) return rez;
   }
