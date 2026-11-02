@@ -17,7 +17,7 @@ const TITLURI = {
   rambursare_legata: 'Rambursări legate de o linie care nu e confirmată ca 100% Matei',
   tva_lipsa: 'Încasări, plăți către colaboratori și facturi FA plătite de Librio / TH Media din aug 2026 fără TVA completat',
   ron_diferit_de_curs: 'Suma în RON nu se potrivește cu cursul',
-  credit_nesincronizat: 'Credite: partea lui Matei din capitalul rămas nu corespunde ratelor din extrase',
+  credit_nesincronizat: 'Credite: suma preluată de Matei la data de tăiere nu se potrivește cu calculul creditului',
 };
 // Doar acestea opresc închiderea unei luni: schimbă suma. Restul sunt semnale pentru verificat.
 const BLOCHEAZA = new Set(VERIFICARI_BANI);
