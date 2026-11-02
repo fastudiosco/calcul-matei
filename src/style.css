@@ -227,3 +227,27 @@ button.semnal:hover { background: #f6e4b0; }
 .intrebare .clasificare { margin-top: 4px; }
 .bulk .intreaba { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; border-left: 1px solid #4a4a48; padding-left: 10px; margin-left: 4px; }
 .bulk .intreaba input { min-width: 220px; }
+
+/* ---------- Raport pentru Matei ---------- */
+.raport-erou .cifra { font: 400 44px/1.05 var(--serif); font-variant-numeric: tabular-nums; }
+.raport-erou .cifra small { font: 500 14px var(--sans); color: var(--gri); }
+.raport-erou .de-facut { gap: 8px; }
+.raport-erou .principal .sub + .sub { border-top: 1px solid #3a3a38; padding-top: 8px; }
+ul.reguli { background: var(--card); border: 1px solid var(--linie); border-radius: 14px; padding: 14px 18px 14px 34px; margin: 8px 0 16px; }
+ul.reguli li { margin: 6px 0; color: var(--ink-2); max-width: 980px; }
+details.bloc-raport { background: var(--card); border: 1px solid var(--linie); border-radius: 14px; padding: 10px 16px; margin: 8px 0; scroll-margin-top: calc(var(--sus) + 8px); }
+details.bloc-raport summary { cursor: pointer; }
+details.bloc-raport .regula { color: var(--ink-2); max-width: 980px; margin: 10px 0 6px; }
+.nota-raport { font-size: 11px; color: var(--ink-2); min-width: 260px; max-width: 520px; white-space: pre-line; }
+.credit .tabel { margin: 4px 0; }
+/* PDF-ul raportului: A4 pe orizontală, tabelele încap întregi (fără derulare), toate coloanele inclusiv dovada. */
+@page raport { size: A4 landscape; margin: 10mm; }
+@media print {
+  .raport { page: raport; }
+  .raport .tabel-lat { overflow: visible; }
+  .raport .tabel.mic th, .raport .tabel.mic td { padding: 4px 6px; }
+  .raport .nota-raport { min-width: 0; max-width: none; }
+  details.bloc-raport { break-inside: auto; border: 0; padding: 0; }
+  .raport-erou { grid-template-columns: 1fr 1fr; }
+  .raport-erou .de-facut { border: 1px solid var(--ink); }
+}

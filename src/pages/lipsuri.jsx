@@ -10,8 +10,9 @@ const NUME_VERIFICARI = {
   manual_fara_ron: 'sume manuale fără RON',
   rambursare_fara_ron: 'rambursări fără RON',
   rambursare_legata: 'rambursări legate de o linie neconfirmată',
-  tva_lipsa: 'încasări / plăți colaboratori din aug 2026 fără TVA',
+  tva_lipsa: 'încasări / plăți colaboratori / facturi plătite de Librio din aug 2026 fără TVA',
   ron_diferit_de_curs: 'suma în RON nu se potrivește cu cursul',
+  credit_nesincronizat: 'credite de recalculat (butonul din Raport)',
 };
 
 // Tot ce lipsește ca suma finală să fie completă, în ordinea în care se rezolvă.
