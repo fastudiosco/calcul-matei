@@ -12,7 +12,7 @@ const NUME_VERIFICARI = {
   rambursare_legata: 'rambursări legate de o linie neconfirmată',
   tva_lipsa: 'încasări / plăți colaboratori / facturi plătite de Librio din aug 2026 fără TVA',
   ron_diferit_de_curs: 'suma în RON nu se potrivește cu cursul',
-  credit_nesincronizat: 'credite de recalculat (butonul din Raport)',
+  credit_nesincronizat: 'credite de recalculat',
 };
 
 // Tot ce lipsește ca suma finală să fie completă, în ordinea în care se rezolvă.

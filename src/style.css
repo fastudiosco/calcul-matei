@@ -239,6 +239,7 @@ details.bloc-raport { background: var(--card); border: 1px solid var(--linie); b
 details.bloc-raport summary { cursor: pointer; }
 details.bloc-raport .regula { color: var(--ink-2); max-width: 980px; margin: 10px 0 6px; }
 .nota-raport { font-size: 11px; color: var(--ink-2); min-width: 260px; max-width: 520px; white-space: pre-line; }
+.credit { grid-template-columns: minmax(0, 1fr); }
 .credit .tabel { margin: 4px 0; }
 /* PDF-ul raportului: A4 pe orizontală, tabelele încap întregi (fără derulare), toate coloanele inclusiv dovada. */
 @page raport { size: A4 landscape; margin: 10mm; }

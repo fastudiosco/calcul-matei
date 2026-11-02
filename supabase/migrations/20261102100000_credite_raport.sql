@@ -27,20 +27,23 @@ create table public.credite (
   luni                   integer,
   tranzactie_incasare_id bigint not null unique references public.tranzactii(id),
   -- Ratele se recunosc în extrasele firmei după text și după sumă (BT folosește același text pentru două credite).
-  model_plata            text not null,
+  model_plata            text not null check (('' ~* model_plata) is not null),
   plata_min              numeric(14,2) not null check (plata_min > 0),
   plata_max              numeric(14,2) not null check (plata_max >= plata_min),
   procent_matei          numeric(9,6) not null default 50 check (procent_matei between 0 and 100),
-  -- Soldul de capital la data de tăiere, din extrasul creditorului: când e completat, înlocuiește graficul.
+  -- Soldul de capital din extrasul creditorului, după o anumită rată: înlocuiește graficul doar cât timp
+  -- în extrasele firmei sunt exact atâtea rate (altfel verificarea credit_nesincronizat cere actualizarea lui).
   sold_creditor          numeric(14,2) check (sold_creditor >= 0),
-  data_sold_creditor     date,
+  sold_creditor_dupa_rata integer check (sold_creditor_dupa_rata >= 0),
+  data_sold_creditor     date check (data_sold_creditor <= public.data_taiere()),
   sursa_sold_creditor    text,
   element_manual_id      integer unique references public.elemente_manuale(id),
   dovada                 text,
   nota                   text,
   creat_la               timestamptz not null default now(),
   creat_de               text default nullif(public.email_curent(), ''),
-  check ((sold_creditor is null) = (data_sold_creditor is null))
+  check ((sold_creditor is null) = (data_sold_creditor is null)),
+  check ((sold_creditor is null) = (sold_creditor_dupa_rata is null))
 );
 
 create table public.credite_grafic (
@@ -115,7 +118,7 @@ with plati as (
 ), baza as (
   select cr.id, cr.cod, cr.nume, cr.creditor, cr.contract, cr.data_acordare, cr.valoare, cr.dobanda, cr.luni, cr.procent_matei,
          cr.tranzactie_incasare_id, cr.element_manual_id, cr.dovada, cr.nota,
-         cr.sold_creditor, cr.data_sold_creditor, cr.sursa_sold_creditor,
+         cr.sold_creditor, cr.sold_creditor_dupa_rata, cr.data_sold_creditor, cr.sursa_sold_creditor,
          inc.suma as primit,
          (select max(i.perioada_pana) from public.importuri i where i.cont_id = inc.cont_id) as extrase_pana,
          coalesce(p.rate_platite, 0) as rate_platite, coalesce(p.platit, 0) as platit, p.ultima_plata,
@@ -127,8 +130,10 @@ with plati as (
   left join pe_credit p on p.credit_id = cr.id
   left join public.credite_grafic gs on gs.credit_id = cr.id and gs.nr = p.rate_platite
 ), cu_sold as (
-  select b.*, coalesce(b.sold_creditor, b.sold_grafic) as sold,
-         case when b.sold_creditor is not null then 'creditor' else 'grafic' end as sursa_sold
+  select b.*,
+         case when b.sold_creditor_dupa_rata = b.rate_platite then b.sold_creditor else b.sold_grafic end as sold,
+         case when b.sold_creditor_dupa_rata = b.rate_platite then 'creditor' else 'grafic' end as sursa_sold,
+         (b.sold_creditor is not null and b.sold_creditor_dupa_rata is distinct from b.rate_platite) as sold_creditor_vechi
   from baza b
 )
 select b.id, b.cod, b.nume, b.creditor, b.contract, b.data_acordare, b.valoare, b.dobanda, b.luni, b.procent_matei,
@@ -137,7 +142,8 @@ select b.id, b.cod, b.nume, b.creditor, b.contract, b.data_acordare, b.valoare, 
        b.primit, b.valoare - b.primit as comision_acordare,
        b.rate_platite, b.platit, b.ultima_plata, b.plati_ids, b.scadenta_ultima_rata,
        g.capital as capital_grafic, g.dobanda as dobanda_grafic, g.comision as comision_grafic, g.rata as rate_grafic,
-       b.sold_grafic, b.sold_creditor, b.data_sold_creditor, b.sursa_sold_creditor, b.sold, b.sursa_sold,
+       b.sold_grafic, b.sold_creditor, b.sold_creditor_dupa_rata, b.data_sold_creditor, b.sursa_sold_creditor,
+       b.sold, b.sursa_sold, b.sold_creditor_vechi,
        (b.sold is null) as grafic_lipsa,
        b.platit + b.sold - b.primit as cost,
        round(b.sold * b.procent_matei / 100, 2) as parte_matei_sold,
@@ -285,7 +291,7 @@ select 'rambursare_legata', r.luna, r.tranzactie_id,
 from public.rambursari r join public.clasificari c on c.tranzactie_id = r.tranzactie_id
 where r.stare = 'confirmat' and (c.stare <> 'confirmat' or c.impartire is distinct from 'matei_100')
 union all
-select 'tva_lipsa', v.luna, v.id, format('%s %s din %s (după 1 august 2026) fără TVA completat', v.suma, v.moneda, v.data_extras)
+select 'tva_lipsa', v.luna, v.id, format('%s %s din %s fără TVA completat (din august 2026 se socotește fără TVA)', v.suma, v.moneda, v.data_extras)
 from public.v_tranzactii v
 where v.titular = 'firma' and v.stare in ('propus','confirmat') and v.tva_ron is null
   and ((v.data_extras >= '2026-08-01' and v.categorie in ('venit_client', 'colaborator'))
@@ -298,15 +304,35 @@ from public.v_tranzactii v
 where v.moneda <> 'RON' and v.curs is not null and v.suma_ron is not null
   and abs(v.suma_ron - round(v.suma * v.curs, 2)) > greatest(0.01, abs(v.suma_ron) * 0.005)
 union all
-select 'credit_nesincronizat', date_trunc('month', public.data_taiere())::date, c.tranzactie_incasare_id,
-       format('%s: elementul manual are %s lei, iar după ratele din extrase ar trebui %s lei. Apasă „Recalculează creditele” în Raport.',
-              c.nume, coalesce(public.lei(c.element_suma_ron), '—'),
-              coalesce(public.lei(c.parte_matei_sold), 'necunoscut (lipsește rândul din grafic pentru ultima rată)'))
+select 'credit_nesincronizat', m.luna, c.tranzactie_incasare_id,
+       c.nume || ': ' || concat_ws('; ',
+         case when c.grafic_lipsa then 'lipsește rândul ' || c.rate_platite || ' din grafic (sau soldul de la creditor după această rată)' end,
+         case when c.sold_creditor_vechi then 'soldul de la creditor e după rata ' || c.sold_creditor_dupa_rata
+                                              || ', dar în extrase sunt ' || c.rate_platite || ' rate: actualizează soldul' end,
+         case when c.element_stare = 'confirmat' and c.parte_matei_sold > 0
+                   and (c.element_suma_ron is distinct from c.parte_matei_sold
+                        or c.element_luna is distinct from date_trunc('month', public.data_taiere())::date)
+              then 'elementul manual e confirmat, dar nu mai corespunde: trece-l pe Propus în Sume manuale, apoi Recalculează creditele' end,
+         case when coalesce(c.element_stare, '') <> 'confirmat' and c.parte_matei_sold > 0 and c.element_suma_ron is distinct from c.parte_matei_sold
+              then 'elementul manual are ' || coalesce(public.lei(c.element_suma_ron), 'nimic') || ' lei, după ratele din extrase ar trebui '
+                   || public.lei(c.parte_matei_sold) || ' lei: Recalculează creditele' end,
+         case when coalesce(c.element_stare, '') <> 'confirmat' and c.parte_matei_sold > 0
+                   and c.element_luna is distinct from date_trunc('month', public.data_taiere())::date and c.element_manual_id is not null
+              then 'elementul manual e pe ' || to_char(c.element_luna, 'MM.YYYY') || ', trebuie pe luna datei de tăiere: Recalculează creditele' end,
+         case when c.parte_matei_sold <= 0 and c.element_manual_id is not null then 'nu mai e capital de preluat, dar elementul manual a rămas' end,
+         case when not c.grafic_lipsa and abs(coalesce(c.efect_incasare, 0) + coalesce(c.efect_rate, 0) + coalesce(c.element_suma_ron, 0) - c.cost_matei)
+                   > 0.01 * (c.rate_platite + 2)
+              then 'încasarea și ratele nu sunt împărțite cu ' || public.lei(c.procent_matei) || '% Matei' end)
 from public.v_credite c
+cross join lateral (select date_trunc('month', public.data_taiere())::date as luna
+                    union select c.element_luna where c.element_luna is not null) m
 where c.grafic_lipsa
+   or c.sold_creditor_vechi
    or (c.parte_matei_sold > 0 and (c.element_suma_ron is distinct from c.parte_matei_sold
                                    or c.element_luna is distinct from date_trunc('month', public.data_taiere())::date))
-   or (c.parte_matei_sold <= 0 and c.element_manual_id is not null);
+   or (c.parte_matei_sold <= 0 and c.element_manual_id is not null)
+   or (not c.grafic_lipsa and abs(coalesce(c.efect_incasare, 0) + coalesce(c.efect_rate, 0) + coalesce(c.element_suma_ron, 0) - c.cost_matei)
+       > 0.01 * (c.rate_platite + 2));
 
 -- Pagina „Ce lipsește” arată și creditele nesincronizate printre problemele care schimbă suma.
 create or replace view public.v_lipsuri with (security_invoker = on) as

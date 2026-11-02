@@ -22,7 +22,7 @@ const semnManual = (m) => (m.sens === 'matei_datoreaza_alex' ? 1 : -1) * Number(
 export function cate(n, unu, multe) {
   if (n === 1) return `1 ${unu}`;
   const r = n % 100;
-  return `${n.toLocaleString('ro-RO')} ${r === 0 || r >= 20 ? 'de ' : ''}${multe}`;
+  return `${n.toLocaleString('ro-RO')} ${(r === 0 && n !== 0) || r >= 20 ? 'de ' : ''}${multe}`;
 }
 
 const procentText = (p) => `${String(Number(p)).replace('.', ',')}%`;
@@ -139,6 +139,11 @@ export function Raport() {
   const rambursariPropuse = rambursariInafara.filter((r) => r.stare !== 'confirmat');
   const deConfirmat = suma(liniiPropuse, (l) => l.efect_matei) + suma(manualePropuse, semnManual) - suma(rambursariPropuse, (r) => r.suma_ron);
   const totalProiectat = totalConfirmat + deConfirmat;
+  const neconfirmate = [
+    liniiPropuse.length && cate(liniiPropuse.length, 'linie', 'linii'),
+    manualePropuse.length && cate(manualePropuse.length, 'sumă manuală', 'sume manuale'),
+    rambursariPropuse.length && cate(rambursariPropuse.length, 'rambursare', 'rambursări'),
+  ].filter(Boolean);
   const luniInchise = d.luni.filter((l) => l.status === 'inchisa').length;
   const confirmate = d.linii.filter((l) => l.stare === 'confirmat').length;
   const final = luniInchise === d.luni.length && d.luni.length > 0;
@@ -200,11 +205,11 @@ export function Raport() {
         <div class="de-facut">
           <h3>Dacă se confirmă și propunerile</h3>
           <div class="cifra">{bani(Math.abs(totalProiectat))} <small>RON</small></div>
-          <p class="gri mic" style={{ margin: 0 }}>{directie(totalProiectat)}. Propunerile încă neconfirmate ({cate(liniiPropuse.length, 'linie', 'linii')}
-            {manualePropuse.length ? `, ${cate(manualePropuse.length, 'sumă manuală', 'sume manuale')}` : ''}{rambursariPropuse.length ? `, ${cate(rambursariPropuse.length, 'rambursare', 'rambursări')}` : ''})
-            schimbă suma cu {deConfirmat > 0 ? '+' : ''}{bani(deConfirmat)} lei. Liniile cu întrebări care au deja o împărțire sunt numărate aici.</p>
-          <p class="gri mic" style={{ margin: 0 }}>Încă fără împărțire: {cate(nedecise.length, 'linie', 'linii')}, în valoare de {bani(suma(nedecise, (l) => Math.abs(Number(l.suma_ron ?? 0))))} lei
-            (valoarea liniilor, nu efectul) — pe blocuri în coloana „Fără decizie”, <a href="#/tranzactii?impartire=-" target="_blank" rel="noopener">lista în Tranzacții</a>.</p>
+          <p class="gri mic" style={{ margin: 0 }}>{directie(totalProiectat)}. {neconfirmate.length
+            ? <>Propunerile încă neconfirmate ({neconfirmate.join(', ')}) schimbă suma cu {deConfirmat > 0 ? '+' : ''}{bani(deConfirmat)} lei. Liniile cu întrebări care au deja o împărțire sunt numărate aici.</>
+            : 'Nu mai sunt propuneri neconfirmate.'}</p>
+          {nedecise.length > 0 && <p class="gri mic" style={{ margin: 0 }}>Încă fără împărțire: {cate(nedecise.length, 'linie', 'linii')}, în valoare de {bani(suma(nedecise, (l) => Math.abs(Number(l.suma_ron ?? 0))))} lei
+            (valoarea liniilor, nu efectul) — pe blocuri în coloana „Fără decizie”, <a href="#/tranzactii?impartire=-" target="_blank" rel="noopener">lista în Tranzacții</a>.</p>}
         </div>
       </section>
 
@@ -361,13 +366,17 @@ function Credit({ c, grafic, liniePeId, deschis, editor }) {
   const parte = Number(c.parte_matei_sold ?? 0);
   const inCalcul = Number(c.efect_incasare ?? 0) + Number(c.efect_rate ?? 0) + element;
   const diferentaGrafic = c.rate_grafic != null ? Number(c.platit) - Number(c.rate_grafic) : 0;
-  const deSincronizat = !c.grafic_lipsa && parte > 0
-    && (c.element_manual_id == null || Math.abs(element - parte) >= 0.005);
+  const lunaTaiere = `${c.data_taiere.slice(0, 7)}-01`;
+  const altaLuna = c.element_manual_id != null && c.element_luna && c.element_luna !== lunaTaiere;
+  const deSincronizat = !c.grafic_lipsa && ((parte > 0 && (c.element_manual_id == null || Math.abs(element - parte) >= 0.005 || altaLuna))
+    || (parte <= 0 && c.element_manual_id != null));
   // Fiecare linie se rotunjește la bani, deci totalul poate diferi de calculul pe credit cu câte un ban pe linie.
   const abatere = Math.abs(inCalcul - Number(c.cost_matei ?? 0));
   const nepotrivit = !c.grafic_lipsa && abatere > 0.01 * (n + 2) + 1e-9;
   // Ratele scadente până la data de tăiere care nu sunt încă în extrase (de ex. octombrie, neimportat).
   const lipsa = grafic.filter((g) => g.nr > n && g.data_scadenta <= c.data_taiere);
+  const cresteMatei = suma(lipsa, (g) => (Number(g.dobanda) + Number(g.comision)) * Number(c.procent_matei) / 100);
+  const lunaLinie = (id) => liniePeId[id]?.luna;
   const randuri = grafic.filter((g) => g.nr <= Math.max(n, lipsa.length ? lipsa[lipsa.length - 1].nr : 0) + 1);
   const p = procentText(c.procent_matei);
   const partial = c.rate_confirmate > 0 && (c.stare_incasare !== 'confirmat' || c.element_stare !== 'confirmat');
@@ -382,12 +391,15 @@ function Credit({ c, grafic, liniePeId, deschis, editor }) {
       <p class="mic" style={{ margin: 0 }}>
         Data de tăiere: {data(c.data_taiere)} · extrase importate până la {data(c.extrase_pana) || '—'} · ultima rată găsită: {c.ultima_plata ? data(c.ultima_plata) : '—'}
       </p>
+      {c.nota && <p class="mic gri" style={{ margin: 0 }}>{c.nota}</p>}
       {lipsa.length > 0 && <p class="atentie" style={{ margin: 0 }}>
         {lipsa.length === 1 ? `Rata ${lipsa[0].nr} (scadentă ${data(lipsa[0].data_scadenta)}) nu e încă în extrase`
-          : `Ratele ${lipsa.map((g) => g.nr).join(', ')} nu sunt încă în extrase`}. După import, capitalul rămas devine {bani(lipsa[lipsa.length - 1].sold)} lei
-        și partea lui Matei din cost crește cu dobânda și comisioanele acestor rate.
+          : `Ratele ${lipsa.map((g) => g.nr).join(', ')} nu sunt încă în extrase`}. După import, capitalul rămas devine {bani(lipsa[lipsa.length - 1].sold)} lei (după grafic)
+        și partea lui Matei din cost crește cu {p} din dobânda și comisioanele lor, aproximativ {bani(cresteMatei)} lei.
       </p>}
       {c.grafic_lipsa && <p class="eroare">Graficul nu are rândul pentru rata {n}{editor ? '; trebuie adăugat în graficul creditului' : ''}.</p>}
+      {c.sold_creditor_vechi && <p class="atentie" style={{ margin: 0 }}>Soldul de la creditor ({bani(c.sold_creditor)} lei) e după rata {c.sold_creditor_dupa_rata},
+        dar în extrase sunt {cate(n, 'rată', 'rate')}: până se potrivesc, capitalul rămas se ia din grafic.</p>}
       {partial && <p class="mic atentie" style={{ margin: 0 }}>Ratele sunt confirmate, dar banii primiți sau capitalul rămas sunt doar propuse: până se confirmă toate trei,
         suma confirmată conține doar partea lui Matei din rate.</p>}
 
@@ -396,25 +408,26 @@ function Credit({ c, grafic, liniePeId, deschis, editor }) {
           <thead><tr><th>Ce intră în calcul</th><th class="n">Bani (lei)</th><th class="n">Matei datorează</th><th>Stare</th></tr></thead>
           <tbody>
             <tr>
-              <td>Banii primiți în cont (<a href={`#/tranzactii?id=${c.tranzactie_incasare_id}`} target="_blank" rel="noopener">linia {c.tranzactie_incasare_id}</a>), {p} pentru Matei
+              <td>Banii primiți în cont (<a href={`#/tranzactii?luna=${lunaLinie(c.tranzactie_incasare_id) || ''}&id=${c.tranzactie_incasare_id}`} target="_blank" rel="noopener">linia {c.tranzactie_incasare_id}</a>), {p} pentru Matei
                 {Number(c.comision_acordare) ? `; ${bani(c.comision_acordare)} lei au fost reținuți de creditor la acordare` : ''}</td>
-              <td class="n nowrap">+{bani(c.primit)}</td><td class="n nowrap">{bani(c.efect_incasare)}</td>
+              <td class="n nowrap">{bani(-Number(c.primit))}</td><td class="n nowrap">{bani(c.efect_incasare)}</td>
               <td>{c.stare_incasare && <span class={`eticheta-stare ${c.stare_incasare}`}>{STARI[c.stare_incasare]}</span>}
                 {c.impartire_incasare !== '50_50' && <div class="mic atentie">împărțirea liniei e {IMPARTIRI[c.impartire_incasare] || 'necompletată'}</div>}</td>
             </tr>
             <tr>
               <td>{cate(n, 'rată plătită', 'rate plătite')}{plati.length ? ` (${data(plati[0].data_extras)} – ${data(plati[plati.length - 1].data_extras)})` : ''}, {p} pentru Matei</td>
-              <td class="n nowrap">−{bani(c.platit)}</td><td class="n nowrap">{bani(c.efect_rate)}</td>
+              <td class="n nowrap">{bani(c.platit)}</td><td class="n nowrap">{bani(c.efect_rate)}</td>
               <td class="mic">{c.rate_confirmate}/{n} confirmate{c.rate_fara_impartire ? <div class="atentie">{c.rate_fara_impartire} fără împărțire</div> : null}</td>
             </tr>
             <tr>
               <td>Capital rămas de plată după rata {n}{c.scadenta_ultima_rata ? ` (scadentă ${data(c.scadenta_ultima_rata)})` : ''}
                 {c.sursa_sold === 'creditor' ? `, din extrasul creditorului la ${data(c.data_sold_creditor)}` : ', din grafic'}: Matei preia {p}</td>
-              <td class="n nowrap">−{bani(c.sold)}</td><td class="n nowrap">{c.element_manual_id ? bani(element) : ''}</td>
+              <td class="n nowrap">{bani(c.sold)}</td><td class="n nowrap">{c.element_manual_id ? bani(element) : ''}</td>
               <td>{c.element_stare && <span class={`eticheta-stare ${c.element_stare}`}>{STARI[c.element_stare]}</span>}
-                {deSincronizat && <div class="mic atentie">{c.element_stare === 'confirmat'
-                  ? `ar trebui ${bani(parte)}; elementul e confirmat${editor ? ': redeschide-l în Sume manuale' : ''}`
-                  : editor ? `ar trebui ${bani(parte)}: apasă „Recalculează creditele”` : 'în curs de actualizare'}</div>}</td>
+                {deSincronizat && <div class="mic atentie">{!editor ? 'în curs de actualizare'
+                  : c.element_stare === 'confirmat'
+                    ? `ar trebui ${bani(parte)}${altaLuna ? ` în ${luna(lunaTaiere)}` : ''}; elementul e confirmat: trece-l pe Propus în Sume manuale, apoi apasă „Recalculează creditele”`
+                    : `ar trebui ${bani(parte)}${altaLuna ? ` în ${luna(lunaTaiere)} (acum e în ${luna(c.element_luna)})` : ''}: apasă „Recalculează creditele”`}</div>}</td>
             </tr>
           </tbody>
           <tfoot><tr><td>Costul creditului până la rata {n} · partea lui Matei</td><td class="n nowrap">{c.grafic_lipsa ? '—' : bani(c.cost)}</td>
@@ -428,13 +441,14 @@ function Credit({ c, grafic, liniePeId, deschis, editor }) {
         Cost = rate plătite + capital rămas − bani primiți = {bani(c.platit)} + {bani(c.sold)} − {bani(c.primit)} = {bani(c.cost)} lei:
         dobânzi {bani(c.dobanda_grafic ?? 0)} și comisioane {bani(c.comision_grafic ?? 0)} din grafic
         {Number(c.comision_acordare) ? `, ${bani(c.comision_acordare)} reținuți la acordare` : ''}
-        {Math.abs(diferentaGrafic) >= 0.01 ? (diferentaGrafic < 0
-          ? `. Ratele s-au plătit cu ${bani(-diferentaGrafic)} lei mai puțin decât graficul (${bani(c.platit)} față de ${bani(c.rate_grafic)}): posibilă restanță, de verificat pe extrasul creditorului`
-          : `. Ratele s-au plătit cu ${bani(diferentaGrafic)} lei mai mult decât graficul (${bani(c.platit)} față de ${bani(c.rate_grafic)})`) : ''}.
+        {Math.abs(diferentaGrafic) >= 0.01
+          ? `. Ratele plătite diferă de grafic cu ${bani(diferentaGrafic)} lei (${bani(c.platit)} față de ${bani(c.rate_grafic)}); explicația e în nota creditului de mai sus`
+          : ''}.
       </p>}
+      {c.dovada && <p class="mic gri" style={{ margin: 0 }}>Dovadă: {c.dovada}</p>}
 
       <details class="bloc-raport" open={deschis}>
-        <summary>Graficul de rambursare, primele {cate(randuri.length, 'rată', 'rate')}</summary>
+        <summary>Graficul de rambursare, {randuri.length === 1 ? 'prima rată' : `primele ${cate(randuri.length, 'rată', 'rate')}`}</summary>
         <div class="tabel-lat">
           <table class="tabel mic">
             <thead><tr><th class="n">Nr.</th><th>Scadență</th><th>Plătit</th><th class="n">Capital</th><th class="n">Dobândă</th><th class="n">Comision</th><th class="n">Rată</th><th class="n">Sold rămas</th></tr></thead>
@@ -444,7 +458,7 @@ function Credit({ c, grafic, liniePeId, deschis, editor }) {
               return (
                 <tr class={g.nr <= n ? '' : 'gri'}>
                   <td class="n">{g.nr}</td><td class="nowrap">{data(g.data_scadenta)}</td>
-                  <td class="nowrap">{pl ? <a href={`#/tranzactii?id=${pl.id}`} target="_blank" rel="noopener">{data(pl.data_extras)} · {bani(-Number(pl.suma))}</a>
+                  <td class="nowrap">{pl ? <a href={`#/tranzactii?luna=${pl.luna}&id=${pl.id}`} target="_blank" rel="noopener">{data(pl.data_extras)} · {bani(-Number(pl.suma))}</a>
                     : neimportata ? <span class="atentie">lipsește din extrase</span> : <span class="gri">—</span>}</td>
                   <td class="n">{bani(g.capital)}</td><td class="n">{bani(g.dobanda)}</td><td class="n">{bani(g.comision)}</td><td class="n">{bani(g.rata)}</td>
                   <td class="n">{g.nr === n ? <b>{bani(g.sold)}</b> : bani(g.sold)}</td>
