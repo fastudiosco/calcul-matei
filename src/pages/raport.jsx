@@ -385,9 +385,10 @@ function Credit({ c, grafic, liniePeId, deschis, editor }) {
   // Negativ doar dacă în extrase e o rată plătită înainte, dar scadentă după data de tăiere.
   const avans = acumulat != null && Number(acumulat) < 0;
   const partiAcumulat = [
-    lipsa.length === 1 ? `rata ${lipsa[0].nr} întreagă` : lipsa.length > 1 ? `ratele ${lipsa.map((g) => g.nr).join(', ')} întregi` : '',
+    lipsa.length === 1 ? `din rata ${lipsa[0].nr}: toată dobânda și tot comisionul`
+      : lipsa.length > 1 ? `din ratele ${lipsa.map((g) => g.nr).join(', ')}: toată dobânda și tot comisionul` : '',
     c.rata_partiala && Number(c.zile_partiale) > 0
-      ? `rata ${c.rata_partiala} pe ${c.zile_partiale} din ${cate(Number(c.zile_rata_partiala), 'zi', 'zile')}` : '',
+      ? `din rata ${c.rata_partiala}: partea pentru ${c.zile_partiale} din cele ${cate(Number(c.zile_rata_partiala), 'zi', 'zile')}` : '',
   ].filter(Boolean);
   const lunaLinie = (id) => liniePeId[id]?.luna;
   const randuri = grafic.filter((g) => g.nr <= Math.max(n, lipsa.length ? lipsa[lipsa.length - 1].nr : 0) + 1);
@@ -447,7 +448,7 @@ function Credit({ c, grafic, liniePeId, deschis, editor }) {
                   {acumulat != null && (avans
                     ? <>, minus dobânda și comisioanele plătite în avans pentru după {data(c.data_taiere)}, din grafic: {bani(-Number(acumulat))} lei</>
                     : <>, plus dobânda și comisioanele de la {data(c.acumulat_de_la)} până la {data(c.data_taiere)}, din grafic:
-                      {' '}{bani(acumulat)} lei{partiAcumulat.length ? ` (${partiAcumulat.join(', ')})` : ''}</>)}</div>}</td>
+                      {' '}{bani(acumulat)} lei{partiAcumulat.length ? ` (${partiAcumulat.join('; ')})` : ''}</>)}</div>}</td>
               <td class="n nowrap">{c.grafic_lipsa ? '—' : bani(c.sold_taiere ?? c.sold)}</td><td class="n nowrap">{c.element_manual_id ? bani(element) : ''}</td>
               <td>{c.element_stare && <span class={`eticheta-stare ${c.element_stare}`}>{STARI[c.element_stare]}</span>}
                 {deSincronizat && <div class="mic atentie">{!editor ? 'în curs de actualizare'
@@ -490,7 +491,7 @@ function Credit({ c, grafic, liniePeId, deschis, editor }) {
                   <td class="nowrap">{pl ? <a href={`#/tranzactii?luna=${pl.luna}&id=${pl.id}`} target="_blank" rel="noopener">{data(pl.data_extras)} · {bani(-Number(pl.suma))}</a>
                     : neimportata ? <span class="atentie">lipsește din extrase{acumulat != null ? '; dobânda și comisionul sunt socotite' : ''}</span>
                     : acumulat != null && !avans && g.nr === c.rata_partiala && Number(c.zile_partiale) > 0
-                      ? <span class="gri">dobânda și comisionul pe {c.zile_partiale} din {cate(Number(c.zile_rata_partiala), 'zi', 'zile')}</span>
+                      ? <span class="gri">dobânda și comisionul pentru {c.zile_partiale} din cele {cate(Number(c.zile_rata_partiala), 'zi', 'zile')}</span>
                     : <span class="gri">—</span>}</td>
                   <td class="n">{bani(g.capital)}</td><td class="n">{bani(g.dobanda)}</td><td class="n">{bani(g.comision)}</td><td class="n">{bani(g.rata)}</td>
                   <td class="n">{g.nr === n ? <b>{bani(g.sold)}</b> : bani(g.sold)}</td>
